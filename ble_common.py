@@ -72,8 +72,6 @@ STANDARD_UUIDS: Dict[str, str] = {
     "1822": "Continuous SpO2",
     # Body Composition
     "181d": "Body Composition",
-    # Glucose
-    "180e": "Glucose",
     # Heart Rate Control Point
     "2a39": "Heart Rate Control Point",
     # Glucose Measurement

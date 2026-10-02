@@ -1,7 +1,6 @@
 import argparse
 import asyncio
 import shlex
-import time
 
 from rich.console import Console
 
