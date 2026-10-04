@@ -5,18 +5,17 @@ searching for characteristics or descriptors matching a UUID substring.
 """
 import argparse
 import asyncio
+
 from bleak import BleakClient
 from rich.console import Console
-
-console = Console()
+from rich.table import Table
 
 from ble_common import (
-    connect,
-    enumerate_services,
-    find_characteristic,
-    find_descriptor,
     GATTTableBuilder,
+    connect,
 )
+
+console = Console()
 
 
 async def find_by_uuid(client: BleakClient, uuid_substring: str, target: str = "char") -> None:
@@ -28,18 +27,20 @@ async def find_by_uuid(client: BleakClient, uuid_substring: str, target: str = "
         target: "char" to find characteristics, "descr" to find descriptors
     """
     uuid_lower = uuid_substring.lower()
-    builder = GATTTableBuilder(title=f"Found {target}s matching '{uuid_substring}'", header_style="bold cyan")
+    builder = GATTTableBuilder(
+        title=f"Found {target}s matching '{uuid_substring}'", header_style="bold cyan"
+    )
     builder.add_services(client)
 
     found = []
-    for _svc, chars in builder._services:
+    for _svc, chars in builder.services:
         for ch in chars.values():
             if uuid_lower in str(ch.uuid).lower():
                 found.append(ch)
 
     if target == "descr":
         # Also check descriptors
-        for _svc, chars in builder._services:
+        for _svc, chars in builder.services:
             for ch in chars.values():
                 for d in ch.descriptors:
                     if uuid_lower in str(d.uuid).lower():
@@ -49,20 +50,26 @@ async def find_by_uuid(client: BleakClient, uuid_substring: str, target: str = "
         console.print(f"[yellow]No {target}s found matching '{uuid_substring}'.[/yellow]")
         return
 
-    table = builder.build()
-    console.print(table)
+    # Only list what actually matched; printing the whole GATT table here would
+    # bury the answer the user asked for.
+    noun = "Characteristics" if target == "char" else "Descriptors"
+    table = Table(title=f"{noun} matching '{uuid_substring}'")
+    table.add_column("UUID", style="cyan", no_wrap=True)
+    table.add_column("Handle", justify="right", style="dim")
+    if target == "char":
+        table.add_column("Properties", justify="center", style="green")
 
     for item in found:
-        extras = ""
         if target == "char":
             props = ", ".join(
                 p.replace("-", " ").title() for p in item.properties
                 if p in ("broadcast", "read", "write-without-response", "write", "notify", "indicate")
             )
-            extras = f" handle={item.handle} props={props}"
-        elif target == "descr":
-            extras = f" uuid={item.uuid}"
-        console.print(f"  [cyan]{item.uuid}[/cyan]{extras}")
+            table.add_row(str(item.uuid), str(item.handle), props)
+        else:
+            table.add_row(str(item.uuid), str(item.handle))
+
+    console.print(table)
 
 
 async def main() -> None:

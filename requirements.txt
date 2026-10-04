@@ -1,0 +1,11 @@
+# Runtime dependencies for BLE_Scripts_MAC.
+# Requires Python 3.11 or newer (uses asyncio.timeout and PEP 604 unions).
+#
+# On macOS, bleak pulls in the CoreBluetooth bindings automatically:
+#   pyobjc-core, pyobjc-framework-corebluetooth, pyobjc-framework-libdispatch
+
+bleak>=3.0.2,<4
+rich>=13.0
+# Development / test dependencies.
+pytest>=8.0
+pytest-asyncio>=1.0

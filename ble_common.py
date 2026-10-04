@@ -1,9 +1,13 @@
 import asyncio
 from typing import Any, Optional, Callable, Dict
-from bleak import BleakClient, BleakScanner
+from bleak import BleakClient, BleakScanner, normalize_uuid_str
 from bleak.backends.device import BLEDevice
 from rich.console import Console
 from rich.table import Table
+
+#: Everything after the first dash of a Bluetooth SIG base UUID, i.e. the tail
+#: of ``0000xxxx-0000-1000-8000-00805f9b34fb``.
+BASE_UUID_SUFFIX = "0000-1000-8000-00805f9b34fb"
 
 console = Console()
 
@@ -47,11 +51,11 @@ def show_value(data: Any, label: str = "") -> None:
 #: Standard 16-bit UUIDs for commonly-queried BLE services and characteristics
 #: See https://www.bluetooth.com/specifications/assigned-numbers/
 STANDARD_UUIDS: Dict[str, str] = {
-    # Device Information Service
-    "180a": "Device Information",
-    # Generic Access
+    # Generic Access / Generic Attribute
     "1800": "Generic Access",
     "1801": "Generic Attribute",
+    # Device Information
+    "180a": "Device Information",
     # Alert
     "1802": "Alert",
     # Battery
@@ -72,61 +76,61 @@ STANDARD_UUIDS: Dict[str, str] = {
     "1822": "Continuous SpO2",
     # Body Composition
     "181d": "Body Composition",
-    # Heart Rate Control Point
-    "2a39": "Heart Rate Control Point",
-    # Glucose Measurement
-    "2a18": "Glucose Measurement",
-    # Heart Rate Measurement
-    "2a37": "Heart Rate Measurement",
-    # Pulse Oximetry
-    "2a6e": "Pulse Oximetry",
     # Alert Notification
     "1812": "Alert Notification",
     # Scan Parameters
     "1813": "Scan Parameters",
+    # Device Name / Appearance, under Generic Access
+    "2a00": "Device Name",
+    "2a01": "Appearance",
+    # Battery Level / Battery Power, under Battery
+    "2a19": "Battery Level",
+    "2a1a": "Battery Power",
+    # Glucose
+    "2a18": "Glucose Measurement",
+    "2a39": "Heart Rate Control Point",
+    # Heart Rate
+    "2a37": "Heart Rate Measurement",
+    "2a38": "Body Sensor Location",
+    # Pulse Oximetry
+    "2a6e": "Pulse Oximetry",
 }
 
 
 def uuid16_from_128(uuid_128: str) -> Optional[str]:
-    """Convert a 128-bit UUID string to its 16-bit representation if one exists.
+    """Reduce a 128-bit UUID to its 16-bit form, if it is a Bluetooth SIG base UUID.
 
-    The Bluetooth spec stores 16-bit UUIDs in the first 2 bytes (octets 2-3)
-    of a 128-bit UUID. After stripping the well-known prefix "0000", the next
-    4 hex characters represent the 16-bit UUID.
+    Accepts 16-bit, 32-bit or 128-bit input. Returns the lowercase 16-bit hex
+    string (no ``0x`` prefix), or None if *uuid_128* is not a SIG base UUID.
 
-    Returns the 16-bit hex string (without '0x' prefix) or None if no 16-bit
-    equivalent is registered.
+    >>> uuid16_from_128("0000180f-0000-1000-8000-00805f9b34fb")
+    '180f'
+    >>> uuid16_from_128("180F")
+    '180f'
+    >>> uuid16_from_128("12345678-0000-1234-1234-1234567890ab") is None
+    True
     """
-    if not uuid_128:
-        return None
-    # Accept with or without dashes / braces
-    clean = uuid_128.replace("-", "").replace("{", "").replace("}", "")
-    if len(clean) != 32:
-        return None
-    # Remove the standard "0000" prefix (first 4 hex chars)
-    # Valid 128-bit UUIDs in BLE have the form: 0000<16-bit>-...
-    if clean.startswith("0000"):
-        hex_16 = clean[4:8]  # the 16-bit UUID is here
-    else:
-        # Try without prefix - last 4 hex chars may be the 16-bit
-        hex_16 = clean[-4:]
     try:
-        val = int(hex_16, 16)
-    except ValueError:
+        normalized = normalize_uuid_str(str(uuid_128).strip())
+    except (AttributeError, TypeError, ValueError):
         return None
-    # Check against known standard UUIDs (keys are 4-char lowercase hex)
-    hex_key = f"{val:04x}"
-    if hex_key in STANDARD_UUIDS:
-        return hex_key
-    # Also try the value as-is (might already be formatted)
-    if hex_key.upper() in STANDARD_UUIDS:
-        return hex_key.upper()
-    return None
+    prefix, _, suffix = normalized.partition("-")
+    if suffix != BASE_UUID_SUFFIX:
+        return None
+    hex_16 = prefix[4:]
+    return hex_16 if len(hex_16) == 4 else None
 
 
 def is_standard_uuid(uuid_128: str) -> bool:
-    """Return True if the 128-bit UUID resolves to a known 16-bit UUID."""
-    return uuid16_from_128(uuid_128) is not None
+    """Return True if the UUID is a base UUID listed in :data:`STANDARD_UUIDS`."""
+    hex_16 = uuid16_from_128(uuid_128)
+    return hex_16 is not None and hex_16 in STANDARD_UUIDS
+
+
+def short_uuid(uuid_128: str) -> str:
+    """Render a UUID compactly: '180f' for SIG base UUIDs, else the full string."""
+    hex_16 = uuid16_from_128(uuid_128)
+    return hex_16 if hex_16 is not None else str(uuid_128)
 
 
 async def find_device(
@@ -135,29 +139,39 @@ async def find_device(
     *,
     callback: Optional[Callable[[BLEDevice, Any], None]] = None,
 ) -> Optional[BLEDevice]:
-    """Scan for a BLE device by address or name substring.
+    """Scan for a BLE device by address or name, returning as soon as it matches.
 
-    Returns the BLEDevice if found within *timeout* seconds, else None.
-    If *callback* is given it will be invoked for each discovered device
-    (callback(device, advertisement)).
+    *identifier* is matched case-insensitively against the device address and
+    then as a substring of the advertised local name.
+
+    Returns the BLEDevice on first match, or None if *timeout* elapses first.
+    If *callback* is given it is invoked for every device seen before the match.
+
+    Note:
+        On macOS ``BLEDevice.address`` is a CoreBluetooth-generated UUID scoped
+        to this Mac, not the peripheral's real MAC address, and it changes
+        between reboots. Prefer a name substring for repeatable use.
     """
-    found: Optional[BLEDevice] = None
+    needle = str(identifier).casefold()
 
-    def _cb(device: BLEDevice, adv: Any) -> None:
-        nonlocal found
-        if found is None:
-            name = (device.name or adv.local_name or "").casefold()
-            needle = str(identifier).casefold()
-            if needle in name:
-                found = device
-        if callback is not None:
-            callback(device, adv)
+    def _matches(device: BLEDevice, adv: Any) -> bool:
+        if needle == str(device.address).casefold():
+            return True
+        name = (device.name or adv.local_name or "").casefold()
+        return bool(needle) and needle in name
 
-    scanner = BleakScanner(detection_callback=_cb)
-    await scanner.start()
-    await asyncio.sleep(timeout)
-    await scanner.stop()
-    return found
+    scanner = BleakScanner()
+    try:
+        async with scanner:
+            async with asyncio.timeout(timeout):
+                async for device, adv in scanner.advertisement_data():
+                    if callback is not None:
+                        callback(device, adv)
+                    if _matches(device, adv):
+                        return device
+    except TimeoutError:
+        pass
+    return None
 
 
 async def connect(
@@ -213,33 +227,35 @@ def find_characteristic(
     *,
     by: str = "uuid",
 ) -> Optional[Any]:
-    """Find a characteristic by UUID substring or by property name.
+    """Find a characteristic by handle, UUID substring, or property name.
 
-    *specifier*: string to match against characteristic UUIDs (case-insensitive,
-    substring match).  Use "readable" to find all characteristics with the
-    ``read`` property, "writable" for write, "notify" for notify, "indicate"
-    for indicate.
+    *specifier*: matched case-insensitively against characteristic UUIDs, or
+    resolved as a handle when it is all digits or ``0x``-prefixed hex.  Use
+    "readable" to find all characteristics with the ``read`` property,
+    "writable" for write, "notify" for notify, "indicate" for indicate.
     *by*: "uuid" (default) or "property".
+
+    Note:
+        ``by="property"`` still returns a *list*; the other modes return a
+        single characteristic or ``None``.
     """
-    specifier = str(specifier).lower()
-    services = enumerate_services(client)
+    # Imported here, not at module scope: ble_gatt imports short_uuid from this
+    # module, so a top-level import would be circular.
+    from ble_gatt import is_descriptor, resolve_target
 
     if by == "property":
-        prop = specifier  # "read", "write", "notify", "indicate", etc.
+        prop = str(specifier).lower()  # "read", "write", "notify", "indicate", etc.
         matching = []
-        for _svc, chars in services:
+        for _svc, chars in enumerate_services(client):
             for ch in chars.values():
-                props = {p for p in ch.properties}
-                if prop in props:
+                if prop in set(ch.properties):
                     matching.append(ch)
-        return matching if matching else None
+        return matching or None
 
-    # UUID/substring match
-    for _svc, chars in services:
-        for ch in chars.values():
-            if specifier in str(ch.uuid).lower():
-                return ch
-    return None
+    found = resolve_target(client, specifier)
+    if found is None or is_descriptor(found):
+        return None
+    return found
 
 
 def find_descriptor(
@@ -247,39 +263,58 @@ def find_descriptor(
     char: Any,
     specifier: str = "",
 ) -> Optional[Any]:
-    """Find a descriptor on a characteristic by UUID substring match."""
+    """Find a descriptor on a characteristic by UUID substring or handle.
+
+    With no *specifier*, returns the characteristic's first descriptor.
+    A handle-shaped *specifier* is matched against ``desc.handle`` first, then
+    as a UUID substring.
+    """
+    from ble_gatt import as_handle
+
     if not specifier:
-        # Return first descriptor if available
         descriptors = char.descriptors
         return descriptors[0] if descriptors else None
-    specifier = str(specifier).lower()
-    for d in char.descriptors:
-        if specifier in str(d.uuid).lower():
-            return d
+
+    text = str(specifier).strip()
+    needle = text.casefold()
+    handle = as_handle(text)
+    if handle is not None:
+        for desc in char.descriptors:
+            if desc.handle == handle:
+                return desc
+
+    for desc in char.descriptors:
+        if needle in str(desc.uuid).casefold():
+            return desc
     return None
 
 
 class GATTTableBuilder:
-    """Build a rich Table of GATT services/characteristics/descriptors.
+    """Build a rich Table of a connected client's GATT characteristics.
 
     Usage:
-        builder = GATTTableBuilder(title="GATT Services")
+        builder = GATTTableBuilder(title="GATT Attributes")
         builder.add_services(client)
-        console.print(builder.table)
+        console.print(builder.build())
     """
 
     def __init__(self, title: str = "GATT Services", header_style: str = "bold cyan"):
         self.title = title
         self.header_style = header_style
-        self._rows: list[tuple[str, ...]] = []
         self._services: list = []
+
+    @property
+    def services(self) -> list:
+        """The (service, characteristics_dict) pairs loaded by :meth:`add_services`."""
+        return self._services
 
     def add_services(self, client: BleakClient) -> "GATTTableBuilder":
         """Populate from a connected BleakClient."""
         self._services = enumerate_services(client)
         return self
 
-    def _format_props(self, props: set[str]) -> str:
+    @staticmethod
+    def _format_props(props: set) -> str:
         """Render a characteristic's property set as a compact string."""
         ordered = []
         for p in ("broadcast", "read", "write-without-response", "write", "notify", "indicate"):
@@ -288,29 +323,58 @@ class GATTTableBuilder:
         return ", ".join(ordered) if ordered else "—"
 
     def build(self) -> Table:
+        """Render the loaded characteristics as a rich Table.
+
+        Safe to call more than once; rows are rebuilt from scratch each call.
+        """
         table = Table(title=self.title, header_style=self.header_style)
+        table.add_column("Service", style="cyan", no_wrap=True)
         table.add_column("UUID", style="magenta", no_wrap=True)
+        table.add_column("Name", style="blue", overflow="fold")
         table.add_column("Handle", justify="right", style="dim")
         table.add_column("Properties", justify="center", style="green")
-        table.add_column("Value", overflow="fold")
 
         for _svc, chars in self._services:
             for ch in chars.values():
-                uuid_short = (
-                    ch.uuid.split("-")[-1]
-                    if "-" in str(ch.uuid)
-                    else str(ch.uuid)[-4:]
-                )
-                self._rows.append((
-                    uuid_short,
+                table.add_row(
+                    short_uuid(_svc.uuid),
+                    short_uuid(ch.uuid),
+                    ch.description or "—",
                     str(ch.handle),
                     self._format_props(ch.properties),
-                    ""  # value placeholder
-                ))
-
-        for row in self._rows:
-            table.add_row(*row)
+                )
         return table
+
+
+def print_gatt_tables(client: BleakClient) -> None:
+    """Print a connected client's full GATT tree: characteristics, then descriptors.
+
+    This is the single enumeration used by the interactive client, so that the
+    ``services``, ``characteristics`` and ``descriptors`` commands all show the
+    same complete picture rather than each hiding handles the others expose.
+    """
+    builder = GATTTableBuilder(title="GATT Characteristics")
+    builder.add_services(client)
+    console.print(builder.build())
+
+    desc_table = Table(title="GATT Descriptors", header_style="bold cyan")
+    desc_table.add_column("Characteristic", style="cyan", no_wrap=True)
+    desc_table.add_column("Descriptor", style="magenta", no_wrap=True)
+    desc_table.add_column("Handle", justify="right", style="dim")
+
+    rows = 0
+    for _svc, chars in builder.services:
+        for ch in chars.values():
+            for desc in ch.descriptors:
+                desc_table.add_row(
+                    short_uuid(ch.uuid), short_uuid(desc.uuid), str(desc.handle)
+                )
+                rows += 1
+
+    if rows:
+        console.print(desc_table)
+    else:
+        console.print("[dim]No descriptors exposed.[/dim]")
 
 
 async def read_gatt_char(client: BleakClient, uuid_or_handle: str | int) -> Any:
@@ -343,31 +407,30 @@ async def write_gatt_char(
 
 
 def parse_advertisement_data(adv: Any) -> dict:
-    """Parse advertisement data from a Bleak advertisement object.
+    """Extract display-ready fields from a bleak AdvertisementData.
 
-    Returns a dict with keys: 'local_name', 'service_uuids', 'manufacturer',
-    'service_data' (maps 16-bit UUID hex -> bytes).
+    Returns a dict with keys ``local_name``, ``service_uuids`` (list of compact
+    UUID strings), ``manufacturer`` (a ``"0xCOMPANY: bytes"`` string covering
+    every manufacturer block, or "") and ``service_data`` (maps compact UUID
+    string -> hex string).
     """
     result = {
         "local_name": adv.local_name or "",
-        "service_uuids": list(adv.service_uuids) if adv.service_uuids else [],
+        "service_uuids": [short_uuid(u) for u in (adv.service_uuids or [])],
         "manufacturer": "",
         "service_data": {},
     }
 
-    # Manufacturer data: adv.manufacturer_data is a dict of ad_type -> bytes
-    md = adv.manufacturer_data or {}
-    for ad_type, data in md.items():
-        # Bleak uses the Bluetooth SIG company_id as the key
-        # We'll just hex-encode it
-        result["manufacturer"] = fmt_bytes(data)
+    # manufacturer_data maps Bluetooth SIG company identifier -> payload.
+    # Apple is 0x004C, which is the interesting one for iBeacon/AirDrop-style
+    # devices, so keep the company id rather than dumping the bytes alone.
+    parts = []
+    for company_id, data in (adv.manufacturer_data or {}).items():
+        parts.append(f"0x{int(company_id):04X}: {fmt_bytes(data)}")
+    result["manufacturer"] = "; ".join(parts)
 
-    # Service data
-    sd = adv.service_data or {}
-    for uuid, data in sd.items():
-        # uuid may be a 128-bit UUID object or string
-        uuid_str = str(uuid).lower().replace("-", "")
-        result["service_data"][uuid_str] = fmt_bytes(data)
+    for uuid, data in (adv.service_data or {}).items():
+        result["service_data"][short_uuid(uuid)] = fmt_bytes(data)
 
     return result
 
@@ -382,10 +445,13 @@ __all__ = [
     "find_characteristic",
     "find_descriptor",
     "GATTTableBuilder",
+    "print_gatt_tables",
     "read_gatt_char",
     "write_gatt_char",
     "parse_advertisement_data",
     "uuid16_from_128",
     "is_standard_uuid",
+    "short_uuid",
+    "BASE_UUID_SUFFIX",
     "STANDARD_UUIDS",
 ]

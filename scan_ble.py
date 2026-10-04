@@ -1,12 +1,14 @@
 import argparse
 import asyncio
+import json
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Tuple
 
 from bleak import BleakScanner
 from rich.console import Console
 from rich.table import Table
 
-from ble_common import parse_advertisement_data, fmt_bytes
+from ble_common import parse_advertisement_data, short_uuid
 
 console = Console()
 
@@ -25,7 +27,6 @@ def make_table(
     # Keep the address on one line. Use --plain if the terminal is still too narrow.
     table.add_column("Address / Identifier", style="dim", no_wrap=True, overflow="fold")
     table.add_column("RSSI", justify="right")
-    table.add_column("Connectable", justify="center")
     table.add_column("Advertised services", overflow="fold")
     table.add_column("Manufacturer data", overflow="fold")
     table.add_column("Service data", overflow="fold")
@@ -39,24 +40,20 @@ def make_table(
         adv_data = parse_advertisement_data(adv)
 
         name = device.name or adv.local_name or "(unnamed)"
-        connectable = "yes" if device.connectable else "no"
 
         # Format service UUIDs
         adv_uuids = adv.service_uuids or []
-        services_str = ", ".join(
-            [f"0x{uuid.uuid[-4:]}" if hasattr(uuid, "uuid") else str(uuid)[-4:] for uuid in adv_uuids]
-            if adv_uuids
-            else "—"
-        )
+        services_str = ", ".join(short_uuid(u) for u in adv_uuids) or "—"
 
-        manufacturer = adv_data.get("manufacturer", "—")
+        manufacturer = adv_data.get("manufacturer") or "—"
         service_data = adv_data.get("service_data", {})
 
-        # Build service data string (show first few entries)
-        sd_parts = []
-        for uuid_hex, data_bytes in list(service_data.items())[:3]:
-            sd_parts.append(f"0x{uuid_hex[:8]}={fmt_bytes(data_bytes)[:16]}")
-        service_data_str = "; ".join(sd_parts) if sd_parts else "—"
+        # Show at most the first three service-data entries.
+        # parse_advertisement_data already returns hex strings, so don't re-format.
+        sd_parts = [
+            f"0x{u[:8]}={data[:16]}" for u, data in list(service_data.items())[:3]
+        ]
+        service_data_str = "; ".join(sd_parts) or "—"
 
         rows.append((address, device, adv))
 
@@ -65,7 +62,6 @@ def make_table(
             name,
             address,
             str(adv.rssi) if adv.rssi is not None else "—",
-            connectable,
             services_str,
             manufacturer,
             service_data_str,
@@ -128,14 +124,15 @@ async def main():
     console.print(f"[cyan]Scanning for {args.timeout:g} seconds...[/cyan]")
     scanner = BleakScanner(detection_callback=detection_callback)
 
+    # `async with` starts the scanner on entry and stops it on exit, so there is
+    # no explicit start()/stop() pair to keep in sync with Ctrl-C handling.
     try:
         async with scanner:
-            await scanner.start()
-            await asyncio.sleep(args.timeout)
-            await scanner.stop()
-    except KeyboardInterrupt:
-        console.print("[yellow]Scan interrupted.[/yellow]")
-        await scanner.stop()
+            async with asyncio.timeout(args.timeout):
+                await asyncio.Event().wait()
+    except (TimeoutError, KeyboardInterrupt):
+        if args.timeout and console.is_terminal:
+            console.print("[yellow]Scan interrupted.[/yellow]")
 
     table, rows = make_table(found)
 
@@ -152,12 +149,9 @@ async def main():
 
     # Optionally write raw data
     if args.write_to and found:
-        import json
-        from datetime import datetime
-
-        now = datetime.utcnow().isoformat()
         output = {
-            "timestamp": now,
+            # datetime.utcnow() is deprecated since 3.12; use an explicit UTC tz.
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "timeout": args.timeout,
             "device_count": len(found),
             "devices": [],
@@ -169,11 +163,10 @@ async def main():
                     "address": address,
                     "name": device.name or adv.local_name or "(unnamed)",
                     "rssi": adv.rssi,
-                    "connectable": device.connectable,
                     "local_name": adv.local_name,
-                    "service_uuids": [str(u) for u in adv.service_uuids] if adv.service_uuids else [],
-                    "manufacturer_data": adv_data.get("manufacturer", ""),
-                    "service_data": adv_data.get("service_data", {}),
+                    "service_uuids": adv_data["service_uuids"],
+                    "manufacturer_data": adv_data["manufacturer"],
+                    "service_data": adv_data["service_data"],
                 }
             )
         with open(args.write_to, "w") as f:

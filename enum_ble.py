@@ -1,24 +1,17 @@
 import argparse
 import asyncio
-import sys
 import traceback
-from typing import Set
 
 from bleak.exc import BleakGATTProtocolError
-from bleak import BleakClient
 from rich.console import Console
-from rich.table import Table
 
-from ble_common
+from ble_common import (
+    GATTTableBuilder,
     connect,
     decode_bytes,
     fmt_bytes,
-    find_characteristic,
-    find_descriptor,
-    GATTTableBuilder,
+    short_uuid,
     show_value,
-    enumerate_services,
-    parse_advertisement_data,
 )
 
 console = Console()
@@ -117,7 +110,7 @@ async def main():
         filter_uuid = args.filter_uuid.lower() if args.filter_uuid else None
 
         all_chars = []  # type: list
-        for _svc, chars in builder._services:
+        for _svc, chars in builder.services:
             for ch in chars.values():
                 # Apply UUID filter
                 if filter_uuid:
@@ -126,12 +119,9 @@ async def main():
 
                 all_chars.append(ch)
 
-        # Build display table
-        table = builder.build()
-
         # Populate value rows for readable characteristics
         if args.readable or args.ctf_mode:
-            for _svc, chars in builder._services:
+            for _svc, chars in builder.services:
                 for ch in chars.values():
                     # Apply UUID filter
                     if filter_uuid and filter_uuid not in str(ch.uuid).lower():
@@ -140,26 +130,21 @@ async def main():
                         continue
                     try:
                         value = await client.read_gatt_char(ch)
-                        # Decode for display
                         text = decode_bytes(value)
-                        # In CTF mode, highlight standard UUIDs
-                        if args.ctf_mode:
-                            # Check if this looks like a CTF-relevant UUID
-                            uuid_l = str(ch.uuid).lower()
-                            if any(
-                                uuid_l.endswith(k.replace("-", "").lower() or k.replace("-", "").lower())
-                                for k in CTF_INTERESTING_UUICS
-                            ):
-                                pass  # would add special formatting
                         if text or args.ctf_mode:
+                            interesting = (
+                                short_uuid(ch.uuid) in CTF_INTERESTING_UUIDS
+                            )
+                            mark = " [bold magenta]<-- interesting[/bold magenta]" if interesting else ""
                             console.print(
-                                f"\n[cyan]Read {ch.uuid} (handle {ch.handle})[/cyan]"
+                                f"\n[cyan]Read {ch.uuid} (handle {ch.handle}){mark}[/cyan]"
                             )
                             show_value(value, label="  ")
                     except BleakGATTProtocolError as exc:
                         code = getattr(exc, "code", None)
+                        code_str = f"0x{code:02X}" if isinstance(code, int) else "n/a"
                         console.print(
-                            f"[red]GATT read failed (code {code}, 0x{code:02X}): {exc}[/red]"
+                            f"[red]GATT read failed (code {code_str}): {exc}[/red]"
                         )
                     except Exception as exc:
                         console.print(
@@ -169,7 +154,7 @@ async def main():
         # Write support
         if args.writable:
             console.print("\n[cyan]Writable characteristics:[/cyan]")
-            for _svc, chars in builder._services:
+            for _svc, chars in builder.services:
                 for ch in chars.values():
                     if "write" in ch.properties or "write-without-response" in ch.properties:
                         console.print(f"  [green]{ch.uuid}[/green] (handle {ch.handle})")
@@ -177,42 +162,47 @@ async def main():
         # Notify/Indicate subscription
         if args.notify or args.indicate:
             console.print("\n[cyan]Subscribe notifications/indications:[/cyan]")
-            subscribed = set()
 
             def _notification_handler(sender, data):
-                subscribed.add(sender)
-                if args.ctf_mode:
-                    text = decode_bytes(data)
-                    if text:
-                        console.print(f"[green]Notification: {text}[/green]")
+                text = decode_bytes(data)
+                if args.ctf_mode and text:
+                    console.print(f"[green]{short_uuid(sender.uuid)}: {text}[/green]")
                 else:
-                    console.print(f"[green]Notification received ([{len(data)}] bytes)[/green]")
+                    console.print(
+                        f"[green]{short_uuid(sender.uuid)} notified "
+                        f"({len(data)} bytes)[/green]"
+                    )
 
-            console.print(
-                "\nSubscribed. Press Ctrl-C to disconnect or run 'unnotify'."
-            )
-
-            for _svc, chars in builder._services:
+            count = 0
+            for _svc, chars in builder.services:
                 for ch in chars.values():
                     # Apply UUID filter
                     if filter_uuid and filter_uuid not in str(ch.uuid).lower():
                         continue
-                    if "notify" in ch.properties:
-                        try:
-                            await client.start_notify(ch, _notification_handler)
-                            console.print(f"[green]Subscribed to notifications on {ch.uuid}[/green]")
-                        except Exception as exc:
-                            console.print(f"[red]Failed to subscribe to {ch.uuid}: {exc!r}[/red]")
-                    if "indicate" in ch.properties and "notify" not in ch.properties:
-                        try:
-                            await client.start_indicate(ch, _notification_handler)
-                            console.print(f"[green]Subscribed to indications on {ch.uuid}[/green]")
-                        except Exception as exc:
-                            console.print(f"[red]Failed to subscribe to indications on {ch.uuid}: {exc!r}[/red]")
+                    if not ({"notify", "indicate"} & ch.properties):
+                        continue
+                    # bleak has no separate indicate call: start_notify writes the
+                    # CCCD, and the peripheral picks notify vs indicate from the
+                    # value written.
+                    kind = (
+                        "notify" if "notify" in ch.properties else "indicate"
+                    )
+                    try:
+                        await client.start_notify(ch, _notification_handler)
+                        count += 1
+                        console.print(
+                            f"  [green]subscribed[/green] {ch.uuid} "
+                            f"(handle {ch.handle}, {kind})"
+                        )
+                    except Exception as exc:
+                        console.print(
+                            f"  [red]failed {kind} on {ch.uuid}: {exc!r}[/red]"
+                        )
 
-            # Auto-unsubscribe on disconnect
-            if client.is_connected:
-                pass  # handlers auto-clean on disconnect
+            console.print(
+                f"\n[dim]{count} subscription(s) active. "
+                "Press Ctrl-C to disconnect.[/dim]"
+            )
 
         # -------------------------------------------------------------------------
         # CTF mode: attempt reads on common UUIDs + summary
@@ -221,27 +211,24 @@ async def main():
             console.print("\n[bold]=== CTF MODE: attempting reads on common UUIDs ===[/bold]")
             found_flags = []
 
-            for _svc, chars in builder._services:
+            for _svc, chars in builder.services:
                 for ch in chars.values():
-                    uuid_l = str(ch.uuid).lower()
-
-                    # Check against known 16-bit standard UUIDs
-                    uuid_16 = uuid_l.split("-")[-1] if "-" in uuid_l else uuid_l[-4:]
-                    if uuid_16 in CTF_INTERESTING_UUICS:
-                        try:
-                            if "read" in ch.properties:
-                                value = await client.read_gatt_char(ch)
-                                text = decode_bytes(value)
-                                label = CTF_INTERESTING_UUICS.get(uuid_16, "unknown")
-                                console.print(
-                                    f"  [magenta]Read {ch.uuid} ({label}):[/magenta] {fmt_bytes(value)}"
-                                )
-                                if text and len(text) > 0 and not text.startswith("("):
-                                    found_flags.append((ch.uuid, text))
-                        except Exception as e:
-                            console.print(
-                                f"    [red]Read error: {e!r}[/red]"
-                            )
+                    if filter_uuid and filter_uuid not in str(ch.uuid).lower():
+                        continue
+                    uuid_16 = short_uuid(ch.uuid)
+                    label = CTF_INTERESTING_UUIDS.get(uuid_16)
+                    if label is None or "read" not in ch.properties:
+                        continue
+                    try:
+                        value = await client.read_gatt_char(ch)
+                        text = decode_bytes(value)
+                        console.print(
+                            f"  [magenta]Read {ch.uuid} ({label}):[/magenta] {fmt_bytes(value)}"
+                        )
+                        if text and not text.startswith("("):
+                            found_flags.append((ch.uuid, text))
+                    except Exception as e:
+                        console.print(f"    [red]Read error: {e!r}[/red]")
 
             if found_flags:
                 console.print(
@@ -258,7 +245,7 @@ async def main():
         # Generic characteristic enumeration (always on)
         # -------------------------------------------------------------------------
         console.print("\n[bold]All characteristics:[/bold]")
-        for _svc, chars in builder._services:
+        for _svc, chars in builder.services:
             for ch in chars.values():
                 # Apply UUID filter
                 if filter_uuid and filter_uuid not in str(ch.uuid).lower():
@@ -272,13 +259,16 @@ async def main():
                     f"  [cyan]UUID {ch.uuid}[/cyan] handle={ch.handle} props={props_str}"
                 )
 
-                # Describe descriptors if any
+                # Describe descriptors if any. Descriptors need read_gatt_descriptor,
+                # not read_gatt_char.
                 descrs = ch.descriptors
                 if descrs:
                     console.print(f"    [dim]Descriptors ({len(descrs)}):[/dim]")
                     for d in descrs[:5]:  # show first 5
-                        dtext = decode_bytes(await client.read_gatt_char(d)) if hasattr(client, 'read_gatt_char') else "?"
-                        console.print(f"      [dim]  {d.uuid}: {dtext}[/dim]")
+                        console.print(
+                            f"      [dim]  {short_uuid(d.uuid)} "
+                            f"(handle {d.handle})[/dim]"
+                        )
                     if len(descrs) > 5:
                         console.print(f"      [dim]... and {len(descrs) - 5} more[/dim]")
 

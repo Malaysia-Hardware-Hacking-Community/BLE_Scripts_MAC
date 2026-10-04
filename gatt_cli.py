@@ -26,7 +26,8 @@ async def main():
 
     try:
         client = await connect(args.device, args.scan_timeout, args.connect_timeout)
-        console.print("[green]Connected.[/green]")
+        if client is None:
+            return
         print_gatt_tables(client)
         console.print(
             "\nCommands:\n"
