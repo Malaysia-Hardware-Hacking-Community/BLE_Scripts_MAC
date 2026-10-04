@@ -1,12 +1,13 @@
 """Report the negotiated ATT MTU for a connected peripheral.
 
-macOS caveat
-------------
-On CoreBluetooth the ATT MTU is negotiated by the OS during connection setup
-and is not exposed for client-side modification. ``bleak`` therefore offers
-``BleakClient.mtu_size`` as a read-only property and no way to request a
-specific value. ``gatttool -m`` on Linux can force an MTU because it talks to
-BlueZ's HCI socket directly; there is no CoreBluetooth equivalent.
+macOS / Windows caveat
+----------------------
+On both CoreBluetooth (macOS) and WinRT (Windows) the ATT MTU is negotiated by
+the OS during connection setup and is not exposed for client-side modification.
+``bleak`` therefore offers ``BleakClient.mtu_size`` as a read-only property and
+no way to request a specific value. ``gatttool -m`` on Linux can force an MTU
+because it talks to BlueZ's HCI socket directly; there is no equivalent on
+macOS or Windows.
 
 This script reports the negotiated value. It does not attempt to set it.
 
@@ -86,6 +87,11 @@ async def main() -> None:
         if sys.platform == "darwin":
             console.print(
                 "[dim]CoreBluetooth negotiates this automatically; "
+                "it cannot be set from Python.[/dim]"
+            )
+        elif sys.platform.startswith("win"):
+            console.print(
+                "[dim]WinRT negotiates this automatically; "
                 "it cannot be set from Python.[/dim]"
             )
         elif sys.platform.startswith("linux"):

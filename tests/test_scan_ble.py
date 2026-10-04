@@ -1,0 +1,70 @@
+"""Tests for the pure UUID-filter logic in scan_ble.
+
+The service-UUID filter is the one piece of scan_ble that does not touch the
+Bluetooth adapter, so it is unit-testable. It regressed once: CoreBluetooth
+reports SIG UUIDs in full 128-bit form, and the original endswith() check
+silently matched nothing on macOS. These tests pin the fixed behaviour.
+"""
+
+import pytest
+
+from scan_ble import service_uuid_matches
+
+# How CoreBluetooth reports 0x180F / 0xFFF0 on macOS.
+BATTERY_128 = "0000180f-0000-1000-8000-00805f9b34fb"
+FFF0_128 = "0000fff0-0000-1000-8000-00805f9b34fb"
+
+
+class TestServiceUuidMatches:
+    def test_short_filter_matches_full_128_bit_uuid(self):
+        # The regression: "180f" must match the full 128-bit advertisement.
+        assert service_uuid_matches("180f", [BATTERY_128]) is True
+
+    def test_short_filter_matches_short_uuid(self):
+        assert service_uuid_matches("fff0", ["fff0"]) is True
+
+    def test_0x_prefix_is_accepted(self):
+        assert service_uuid_matches("0x180F", [BATTERY_128]) is True
+
+    def test_uppercase_filter_is_case_insensitive(self):
+        assert service_uuid_matches("180F", [BATTERY_128]) is True
+
+    def test_full_uuid_filter_matches_full_uuid(self):
+        assert service_uuid_matches(BATTERY_128, [BATTERY_128]) is True
+
+    def test_full_uuid_filter_matches_short_advertised_form(self):
+        # Linux advertises the short form; a user who pastes the full UUID must
+        # still match it. Matching has to work in both directions.
+        assert service_uuid_matches(BATTERY_128, ["180f"]) is True
+
+    def test_non_matching_uuid_is_rejected(self):
+        assert service_uuid_matches("180f", [FFF0_128]) is False
+
+    @pytest.mark.parametrize("fragment", ["1000", "8000", "0000", "34fb", "805f"])
+    def test_base_uuid_suffix_fragments_do_not_match_every_sig_device(self, fragment):
+        # The regression this guards against: a substring test against the full
+        # 128-bit form matches fragments of the Bluetooth base suffix, so these
+        # would have matched every standard device. They must match nothing.
+        assert service_uuid_matches(fragment, [BATTERY_128]) is False
+
+    def test_partial_fragment_of_16bit_does_not_match(self):
+        # Exact-canonical matching, not substring: "2a1" is not "2a19".
+        assert service_uuid_matches("2a1", ["00002a19-0000-1000-8000-00805f9b34fb"]) is False
+
+    def test_empty_uuid_list_is_rejected(self):
+        assert service_uuid_matches("180f", []) is False
+
+    def test_none_uuid_list_is_rejected(self):
+        assert service_uuid_matches("180f", None) is False
+
+    def test_empty_filter_matches_nothing(self):
+        # An empty or junk-only filter must not match every device.
+        assert service_uuid_matches("", [BATTERY_128]) is False
+        assert service_uuid_matches("0x", [BATTERY_128]) is False
+
+    def test_matches_when_any_of_several_uuids_matches(self):
+        assert service_uuid_matches("180f", [FFF0_128, BATTERY_128]) is True
+
+    @pytest.mark.parametrize("needle", ["180f", "0x180f", "0000180f"])
+    def test_equivalent_spellings_all_match(self, needle):
+        assert service_uuid_matches(needle, [BATTERY_128]) is True

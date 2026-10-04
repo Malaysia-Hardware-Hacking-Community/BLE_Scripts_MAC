@@ -33,13 +33,12 @@ async def find_by_uuid(client: BleakClient, uuid_substring: str, target: str = "
     builder.add_services(client)
 
     found = []
-    for _svc, chars in builder.services:
-        for ch in chars.values():
-            if uuid_lower in str(ch.uuid).lower():
-                found.append(ch)
-
-    if target == "descr":
-        # Also check descriptors
+    if target == "char":
+        for _svc, chars in builder.services:
+            for ch in chars.values():
+                if uuid_lower in str(ch.uuid).lower():
+                    found.append(ch)
+    else:  # descr: search descriptors only, never characteristics
         for _svc, chars in builder.services:
             for ch in chars.values():
                 for d in ch.descriptors:

@@ -1,15 +1,23 @@
-# BLE_Scripts_MAC
+# WAMBLE — Windows And Mac BLE
 
-Bluetooth Low Energy tooling for macOS, in the shape of the Linux `gatttool` / BlueZ
-command-line utilities.
+Bluetooth Low Energy tooling for **macOS and Windows**, in the shape of the
+Linux `gatttool` / BlueZ command-line utilities.
 
 `gatttool`, `bluetoothctl`, `btmgmt` and `hciconfig` are part of the Linux BlueZ
-stack. They do not exist on macOS, which talks to Bluetooth through CoreBluetooth
-instead. This repository reimplements the parts of that toolkit that are useful
-for inspecting and poking at BLE peripherals, using [bleak] for the Bluetooth
-work and [rich] for terminal output.
+stack. They do not exist on macOS (which talks to Bluetooth through
+CoreBluetooth) or on Windows (which uses the WinRT Bluetooth API). WAMBLE
+reimplements the parts of that toolkit that are useful for inspecting and poking
+at BLE peripherals, using [bleak] for the Bluetooth work and [rich] for terminal
+output. Because bleak abstracts CoreBluetooth and WinRT behind one API, the same
+scripts run on both operating systems.
 
 No `sudo`, no `hcitool`, no BlueZ. Just Python.
+
+> **Platform status.** WAMBLE is developed and tested on macOS. The Windows
+> support is by way of bleak's WinRT backend and is expected to work from
+> PowerShell, but has not yet been verified on a Windows machine — if you run it
+> on Windows, reports (and PRs) are welcome. Where macOS and Windows differ, it
+> is called out below.
 
 [bleak]: https://github.com/hbldh/bleak
 [rich]: https://github.com/Textualize/rich
@@ -18,25 +26,40 @@ No `sudo`, no `hcitool`, no BlueZ. Just Python.
 
 ## Requirements
 
-- macOS 11 or newer
-- Python 3.11 or newer
+- **macOS 11+** *or* **Windows 10 (build 16299+) / Windows 11**
+- Python 3.11 or newer (uses `asyncio.timeout` and PEP 604 unions)
 - Bluetooth enabled, and permission to use it
 
+### macOS
+
 ```bash
-git clone https://github.com/Malaysia-Hardware-Hacking-Community/BLE_Scripts_MAC.git
-cd BLE_Scripts_MAC
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-On macOS, bleak installs the CoreBluetooth bindings (`pyobjc-framework-corebluetooth`)
-for you. The first time a script touches the Bluetooth adapter, macOS shows a
-permission prompt — if you dismissed it, re-enable it under
-**System Settings → Privacy & Security → Bluetooth**.
+bleak installs the CoreBluetooth bindings (`pyobjc-framework-corebluetooth`) for
+you. The first time a script touches the adapter, macOS shows a Bluetooth
+permission prompt — if you dismissed it, re-enable it under **System Settings →
+Privacy & Security → Bluetooth** for your terminal app.
+
+### Windows (PowerShell)
+
+```powershell
+py -3 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
+
+bleak uses the built-in WinRT Bluetooth API — no extra native packages. Make
+sure Bluetooth is turned on (**Settings → Bluetooth & devices**). If PowerShell
+blocks the activate script, allow it for the session with
+`Set-ExecutionPolicy -Scope Process RemoteSigned`. Use `python` (or `py`) in
+place of `python3` in the examples below.
 
 ## Quick start
 
 ```bash
+./ble_tui.sh                         # menu TUI driving every tool (macOS/Linux shells)
 python3 scan_ble.py                  # what is advertising near me?
 python3 enum_ble.py "Device Name"    # what GATT attributes does it expose?
 python3 gatt_cli.py "Device Name"    # poke at it interactively
@@ -44,7 +67,7 @@ python3 gatt_cli.py "Device Name"    # poke at it interactively
 
 ## Scripts
 
-| Script | Replaces | What it does |
+| Script | Replaces (Linux) | What it does |
 | --- | --- | --- |
 | [`scan_ble.py`](scan_ble.py) | `bluetoothctl scan on`, `hcitool scan` | Scan advertisements for a fixed window. Filter by name, service UUID or RSSI. Optionally dump JSON. |
 | [`watch_ble.py`](watch_ble.py) | `btmon` | Live-refreshing view of advertisements, strongest signal first, until interrupted. |
@@ -55,7 +78,7 @@ python3 gatt_cli.py "Device Name"    # poke at it interactively
 | [`read_device_info.py`](read_device_info.py) | — | Read the Device Information Service (`0x180A`): model, serial, firmware, hardware revisions. |
 | [`gatt_mtu.py`](gatt_mtu.py) | `gatttool -m` | Report the negotiated ATT MTU. Read-only — see [MTU](#mtu-and-connection-parameters). |
 | [`gatt_params.py`](gatt_params.py) | `btmgmt conn-update` | Read or request a connection parameter range via descriptor `0x2A0E`. |
-| [`ble_common.py`](ble_common.py) | — | Shared library. Not an entry point. |
+| [`ble_common.py`](ble_common.py) · [`ble_gatt.py`](ble_gatt.py) | — | Shared libraries. Not entry points. |
 
 Every script takes `--help`.
 
@@ -66,20 +89,10 @@ Every script takes `--help`.
 ```bash
 python3 scan_ble.py -t 15                          # 15 second scan
 python3 scan_ble.py -n Fitbit                      # only names containing "Fitbit"
-python3 scan_ble.py -s 180f                       # only devices advertising 0x180F
-python3 scan_ble.py -m -70                        # ignore anything weaker than -70 dBm
-python3 scan_ble.py --plain                       # no table, pipe-friendly
-python3 scan_ble.py --write-to scan.json          # save results as JSON
-```
-
-```
-                                 Nearby BLE Devices
-┏━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━┳━━━━━━┳━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━┓
-┃  # ┃ Name         ┃ Address /         ┃ RSSI ┃ Advertised       ┃ Manufacturer data    ┃
-┃    ┃              ┃ Identifier        ┃      ┃ services         ┃                      ┃
-┡━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━╇━━━━━━╇━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━┩
-│  1 │ Acme Tracker ┆ F4:FE:FB:B7:AF:32 ┆ -52  ┆ 180f, 181a       ┆ 0x004C: 02 15 …    │
-└────┴──────────────┴────────────────────┴──────┴──────────────────┴──────────────────────┘
+python3 scan_ble.py -s 180f                        # only devices advertising 0x180F
+python3 scan_ble.py -m -70                         # ignore anything weaker than -70 dBm
+python3 scan_ble.py --plain                        # no table, pipe-friendly
+python3 scan_ble.py --write-to scan.json           # save results as JSON
 ```
 
 ### Watching advertisements live
@@ -89,9 +102,6 @@ python3 watch_ble.py                      # refresh until Ctrl-C
 python3 watch_ble.py --name Acme --timeout 60
 ```
 
-The screen redraws in place at `--refresh` frames per second (default 4) instead of
-scrolling a new table every couple of seconds.
-
 ### Enumerating GATT attributes
 
 ```bash
@@ -99,12 +109,7 @@ python3 enum_ble.py "Acme Tracker"
 python3 enum_ble.py "Acme Tracker" --readable       # read everything readable
 python3 enum_ble.py "Acme Tracker" --filter-uuid 2a  # just UUIDs containing "2a"
 python3 enum_ble.py "Acme Tracker" --notify          # subscribe and stream updates
-python3 enum_ble.py "Acme Tracker" --ctf-mode        # highlight interesting UUIDs
 ```
-
-`--notify` and `--indicate` both go through bleak's `start_notify`, which writes the
-CCCD; the peripheral picks notify versus indicate from the value written. bleak has
-no separate indication call, and does not need one.
 
 ### Interactive client
 
@@ -118,115 +123,125 @@ $ python3 gatt_cli.py "Acme Tracker"
 ```
 
 Commands: `services`, `characteristics`, `descriptors`, `read`, `write-req`,
-`write-cmd`, `notify`, `indicate`, `unnotify`, `quit`. The read, write and
-subscribe commands take a UUID substring, matched case-insensitively. The first
-three print the same full enumeration, so nothing is hidden behind a narrower view.
-Writes take hex bytes, e.g. `write-cmd 6e000001 0100`.
+`write-cmd`, `notify`, `indicate`, `unnotify`, `quit`. The read/write/subscribe
+commands take a UUID substring or a handle, matched case-insensitively.
 
-### Finding a UUID
+### Finding a UUID, device info, battery
 
 ```bash
 python3 gatt_find.py "Acme Tracker" 2a19
 python3 gatt_find.py "Acme Tracker" 2902 --target descr
-```
-
-### Device information and battery
-
-```bash
 python3 read_device_info.py "Acme Tracker"
 python3 gatt_battery.py "Acme Tracker"
-python3 gatt_battery.py "Acme Tracker" -f raw
 ```
 
-## Things that do not work on macOS
+## Menu TUI, exploits, and CTF client
 
-This is the honest part. CoreBluetooth exposes far less than BlueZ, and some of
-`gatttool`'s most-used features have no equivalent.
+Beyond the individual scripts, WAMBLE ships three extras, all built on the same
+`bleak` core (so the same cross-platform expectations apply):
 
-**There is no `bluetoothctl` pairing flow.** `bleak` exposes `BleakClient.pair()`,
-but on CoreBluetooth pairing is driven by the OS and cannot be scripted the way
-`bluetoothctl pair <mac>` can on Linux.
+- **[`ble_tui.sh`](ble_tui.sh)** — a keyboard-driven menu that launches every
+  tool below, prompts for the device/arguments, and includes a captures viewer.
+  It's a Bash script (macOS/Linux shells, or WSL/Git Bash on Windows); or just
+  call the Python tools directly.
+- **[`BLE-Exploits/`](BLE-Exploits/)** — a suite of **authorized, non-destructive**
+  BLE vulnerability demonstrations (unauthenticated GATT harvest, posture
+  assessment, LED control PoC, notification capture, capture-replay, persistence,
+  device-name defacement, passive advertisement harvest), each targeting one
+  named device, for hardware you own. See [`BLE-Exploits/README.md`](BLE-Exploits/README.md).
+- **[`ble_ctf.py`](ble_ctf.py)** — a gatttool-style, scriptable client for a
+  hackgnar-style BLE CTF (read/write/notify by handle, read-loop, score/submit).
+  On macOS it solves 16/20 flags (4 need Linux/BlueZ — set-MAC and force-MTU, and
+  two "hidden notification" flags CoreBluetooth can't subscribe to); on Windows
+  the ATT handles match the Linux walkthrough directly.
 
-**MAC addresses are not MAC addresses.** On macOS, `BLEDevice.address` is a UUID
-that CoreBluetooth generates per Mac per peripheral. It is *not* the peripheral's
-real MAC, and it changes across reboots. Prefer a name substring. On Linux the same
-field is the real MAC.
+These carry an authorization gate on anything that transmits. Use them only
+against devices you own or are authorized to test.
 
-**Service data is limited.** macOS does not hand applications the raw advertisement
-payload the way a BlueZ HCI sniffer does, so `btmon`-grade packet capture has no
-equivalent here.
+## Platform differences and limits
+
+This is the honest part. CoreBluetooth and WinRT both expose far less than BlueZ,
+and some of `gatttool`'s most-used features have no cross-platform equivalent.
+
+**Device address.** On **Windows** and **Linux**, `BLEDevice.address` is the
+peripheral's real Bluetooth MAC — stable, and the thing you can pass as a target.
+On **macOS**, CoreBluetooth hides the MAC and hands you a per-host UUID instead,
+which changes across reboots. On macOS, prefer a **name substring**; on Windows
+you can use either the name or the MAC. All scripts accept either.
+
+**ATT handles.** BlueZ/`gatttool` expose the real ATT handle of each attribute.
+WinRT exposes real handles; **CoreBluetooth does not** — bleak synthesizes a
+handle on macOS that is the characteristic *declaration* handle, one below the
+`gatttool` *value* handle. If a handle from a Linux walkthrough does not resolve
+on macOS, try one lower, or address the attribute by UUID (always reliable).
+
+**No scripted pairing on macOS.** `bleak` exposes `BleakClient.pair()`; on
+Windows it drives the OS pairing flow, but on CoreBluetooth pairing is OS-driven
+and cannot be scripted the way `bluetoothctl pair <mac>` can on Linux.
+
+**No raw packet capture.** Neither macOS nor Windows hands applications the raw
+advertisement/HCI stream the way a BlueZ sniffer (`btmon`) does.
 
 ### MTU and connection parameters
 
-`gatt_mtu.py` **reports** the negotiated MTU. It cannot set it.
-
-CoreBluetooth negotiates the ATT MTU itself during connection setup, and bleak
-exposes `BleakClient.mtu_size` as a read-only property. Linux `gatttool -m` can force
-an MTU because it binds to BlueZ's HCI socket and issues an MTU Exchange Request
-directly; there is no CoreBluetooth equivalent. An earlier version of this script
-printed a success message without doing anything — that was a lie, and it is gone.
+`gatt_mtu.py` **reports** the negotiated MTU; it cannot set it. Both
+CoreBluetooth and WinRT negotiate the ATT MTU themselves at connection setup and
+expose it read-only (`BleakClient.mtu_size`). Linux `gatttool -m` can force an
+MTU because it binds to BlueZ's HCI socket; there is no equivalent on macOS or
+Windows.
 
 `gatt_params.py --set` writes descriptor `0x2A0E` on the GAP service (`0x1800`),
-which is the correct place to request a connection parameter range. But the write is
-only a *request*: the peripheral may accept, clamp, or ignore it, and the values
-actually in force are negotiated in HCI, which macOS does not expose. `--get` reads
-back what the peripheral *advertises*, which is not the same as what is in force, and
-says so.
+the correct place to *request* a connection parameter range — but it is only a
+request. The values actually in force are negotiated in HCI, which neither
+CoreBluetooth nor WinRT exposes, so `--get` reports what the peripheral
+*advertises*, not what is in force, and says so.
 
-On Linux, `mtu_size` always reports 23 regardless of the real link MTU, so
-`gatt_mtu.py` is only meaningful on macOS.
+On Linux/BlueZ `mtu_size` always reports 23 regardless of the real link MTU, so
+`gatt_mtu.py` is only meaningful on macOS and Windows.
 
 ## Notes on bleak
 
-Written against bleak 3.x. Two API details worth knowing if you extend this:
+Written against bleak 3.x.
 
-- `BleakScanner.find_device_by_name()` matches `local_name` **exactly**. These
+- `BleakScanner.find_device_by_name()` matches `local_name` **exactly**; these
   scripts match on a *substring*, so `ble_common.find_device()` uses
-  `find_device_by_filter()` instead — using the built-in would silently break every
-  partial-name lookup.
+  `find_device_by_filter()` instead.
 - `find_device_by_filter()` resolves as soon as a device matches rather than
-  sleeping for the full timeout. A device that advertises immediately is found in
-  milliseconds instead of after the entire `--scan-timeout`.
+  sleeping for the full timeout.
 
 ## Troubleshooting
 
-**`BleakError: BleakClient requires a connected BleakDevice` / nothing is found.**
-Check the device is actually advertising. Many peripherals stop advertising once
-they have a connection, so close any app that is connected to it, or power-cycle it.
+**Nothing is found / no permission prompt.**
+- *macOS:* Bluetooth access is off for your terminal — enable it under
+  **System Settings → Privacy & Security → Bluetooth**.
+- *Windows:* make sure Bluetooth is on in **Settings → Bluetooth & devices**,
+  and that the app has Bluetooth permission.
 
-**No output at all, no permission prompt.** macOS has Bluetooth access switched off
-for your terminal. Check **System Settings → Privacy & Security → Bluetooth** and
-make sure your terminal (Terminal, iTerm, VS Code) is listed and enabled.
+**Connects then drops / `Services discovery failed`.** Some cheap devices need a
+moment after connect — retry, or raise `--connect-timeout`.
 
-**`BleakError: Services discovery failed` / connects then drops.** The peripheral
-refused service discovery. Some cheap devices need a moment after connect — retry,
-or use `--connect-timeout 60`.
+**Reads return empty or `Insufficient Authentication`.** The characteristic
+requires bonding/encryption; neither OS lets you force that pairing from a script.
 
-**Reads return empty or `Insufficient Authentication`.** The characteristic requires
-bonding or encryption, and macOS will not let you force that pairing. `enum_ble.py`
-prints the GATT error code when the peripheral answers with one.
+**A handle from a Linux writeup doesn't resolve on macOS.** See *ATT handles*
+above — address by UUID, or try the handle one lower.
 
-**`read_gatt_char` hangs.** Raise `--connect-timeout`, or narrow with
-`--filter-uuid` to avoid reading a characteristic that never answers.
+## Tests
 
-**Everything is slow on first run.** The first connection to a peripheral pays for
-CoreBluetooth service discovery and the system Bluetooth permission check. Later runs
-are faster.
+The pure logic — UUID handling, GATT target resolution, long writes,
+advertisement parsing — is tested without a Bluetooth adapter and runs on any OS:
+
+```bash
+python -m pytest -q        # no hardware required
+```
 
 ## Contributing
 
-Pull requests are welcome.
-
-- Keep each script runnable on its own with no arguments beyond its own flags.
-- Shared helpers belong in `ble_common.py`; do not copy them between scripts.
-- Verify changes against the installed bleak, not an assumed API:
-  ```bash
-  python3 -m py_compile *.py
-  python3 scan_ble.py --help
-  ```
-- If you change GATT parsing or UUID handling, the pure functions in
-  `ble_common.py` (`short_uuid`, `uuid16_from_128`, `parse_advertisement_data`) are
-  testable without a Bluetooth adapter. Please keep them free of I/O.
+- Keep each script runnable on its own.
+- Shared helpers belong in `ble_common.py` / `ble_gatt.py`.
+- Verify changes against the installed bleak:
+  `python -m py_compile *.py` and `python scan_ble.py --help`.
+- Keep the pure functions in `ble_common.py`/`scan_ble.py` free of I/O and tested.
 
 ## License
 

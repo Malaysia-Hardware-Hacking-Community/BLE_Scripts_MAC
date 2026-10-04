@@ -216,3 +216,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# BLE-Exploits runtime capture output (regenerated per run)
+BLE-Exploits/captures/

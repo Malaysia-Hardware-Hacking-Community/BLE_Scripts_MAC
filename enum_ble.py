@@ -98,7 +98,9 @@ async def main():
             console.print("[red]Failed to connect.[/red]")
             return
 
-        console.print("[green]Connected.[/green]")
+        # Number of active notify/indicate subscriptions. Defined up front so the
+        # end-of-run wait loop can reference it whether or not --notify was given.
+        count = 0
 
         # -------------------------------------------------------------------------
         # GATT enumeration
@@ -173,13 +175,12 @@ async def main():
                         f"({len(data)} bytes)[/green]"
                     )
 
-            count = 0
             for _svc, chars in builder.services:
                 for ch in chars.values():
                     # Apply UUID filter
                     if filter_uuid and filter_uuid not in str(ch.uuid).lower():
                         continue
-                    if not ({"notify", "indicate"} & ch.properties):
+                    if not ({"notify", "indicate"} & set(ch.properties)):
                         continue
                     # bleak has no separate indicate call: start_notify writes the
                     # CCCD, and the peripheral picks notify vs indicate from the
@@ -199,10 +200,7 @@ async def main():
                             f"  [red]failed {kind} on {ch.uuid}: {exc!r}[/red]"
                         )
 
-            console.print(
-                f"\n[dim]{count} subscription(s) active. "
-                "Press Ctrl-C to disconnect.[/dim]"
-            )
+            console.print(f"\n[dim]{count} subscription(s) active.[/dim]")
 
         # -------------------------------------------------------------------------
         # CTF mode: attempt reads on common UUIDs + summary
@@ -278,6 +276,18 @@ async def main():
         console.print(
             f"\n[dim]Total characteristics enumerated: {len(all_chars)}[/dim]"
         )
+
+        # If the user asked to subscribe, block here so notifications actually
+        # arrive. Without this the function would return and the finally below
+        # would disconnect before the peripheral ever pushed an update.
+        if (args.notify or args.indicate) and count:
+            console.print(
+                "\n[dim]Streaming updates. Press Ctrl-C to disconnect.[/dim]"
+            )
+            # Block until interrupted. On Ctrl-C the task is cancelled; the
+            # cancellation propagates (not swallowed) so the finally below runs
+            # to disconnect and __main__ reports it, matching watch_ble.
+            await asyncio.Event().wait()
 
     except Exception as exc:
         console.print(f"[red]{type(exc).__name__}: {exc!r}[/red]")

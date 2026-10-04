@@ -1,0 +1,359 @@
+Make sure you have Bluetooth soft and hard unblocked :
+
+rfkill list bluetooth
+
+bluetoothctl list (Usually used on Kali but no need if you already have bluetooth enabled on systemd)
+
+
+Scanning for ble device :
+
+gratttool --scan
+
+Enumerating the ble device :
+
+gratttool -b <INSERT ADDRESS HERE> --enumerate
+
+How to check score on the ble ctf device :
+
+gratttool -b <INSERT ADDRESS HERE> --char-read -a 0x002a|awk -F: '{print $2}'|tr -d ' '|xxd -r -p;printf '\n'
+
+
+How to get the first flag :
+
+Reference : docs/hints/flag1.md, submission UUID 0xff02, handle 0x002c
+
+gratttool -b <INSERT ADDRESS HERE> --char-write-req -a 0x002c -n $(echo -n "12345678901234567890"|xxd -ps)
+
+How to get second flag :
+
+Reference : docs/hints/flag2.md, UUID 0xff03, handle 0x002e
+
+gratttool -b <INSERT ADDRESS HERE> --char-read -a 0x002e | cut -d':' -f2 | xxd -r -p; echo
+
+Output : d205303e099ceff44835
+
+gratttool -b <INSERT ADDRESS HERE> -a 0x2c --char-write-req -n $(echo -n d205303e099ceff44835| xxd -ps)
+
+How to get third flag :
+
+Reference : docs/hints/flag3.md, UUID 0xff04, handle 0x0030
+
+gratttool -b <INSERT ADDRESS HERE> -a 0x30 --char-read | cut -d':' -f2 | xxd -r -p; echo
+
+Output : MD5 of Device Name
+
+echo -n "M0DUL0CTF" | md5sum
+
+Output : 637260d8e70610e0d300c5bddd94ee37  -
+
+I was mainly testing some stuff here :
+
+gratttool -b <INSERT ADDRESS HERE> --primary
+attr handle = 0x0001, end grp handle = 0x0004 uuid: 00001801-0000-1000-8000-00805f9b34fb
+attr handle = 0x0014, end grp handle = 0x001a uuid: 00001800-0000-1000-8000-00805f9b34fb
+attr handle = 0x0028, end grp handle = 0xffff uuid: 000000ff-0000-1000-8000-00805f9b34fb
+
+gratttool -b <INSERT ADDRESS HERE> --characteristics
+handle = 0x0002, char properties = 0x20, char value handle = 0x0003, uuid = 00002a05-0000-1000-8000-00805f9b34fb
+handle = 0x0015, char properties = 0x02, char value handle = 0x0016, uuid = 00002a00-0000-1000-8000-00805f9b34fb
+handle = 0x0017, char properties = 0x02, char value handle = 0x0018, uuid = 00002a01-0000-1000-8000-00805f9b34fb
+handle = 0x0019, char properties = 0x02, char value handle = 0x001a, uuid = 00002aa6-0000-1000-8000-00805f9b34fb
+handle = 0x0029, char properties = 0x02, char value handle = 0x002a, uuid = 0000ff01-0000-1000-8000-00805f9b34fb
+handle = 0x002b, char properties = 0x0a, char value handle = 0x002c, uuid = 0000ff02-0000-1000-8000-00805f9b34fb
+handle = 0x002d, char properties = 0x02, char value handle = 0x002e, uuid = 0000ff03-0000-1000-8000-00805f9b34fb
+handle = 0x002f, char properties = 0x02, char value handle = 0x0030, uuid = 0000ff04-0000-1000-8000-00805f9b34fb
+handle = 0x0031, char properties = 0x0a, char value handle = 0x0032, uuid = 0000ff05-0000-1000-8000-00805f9b34fb
+handle = 0x0033, char properties = 0x0a, char value handle = 0x0034, uuid = 0000ff06-0000-1000-8000-00805f9b34fb
+handle = 0x0035, char properties = 0x0a, char value handle = 0x0036, uuid = 0000ff07-0000-1000-8000-00805f9b34fb
+handle = 0x0037, char properties = 0x02, char value handle = 0x0038, uuid = 0000ff08-0000-1000-8000-00805f9b34fb
+handle = 0x0039, char properties = 0x08, char value handle = 0x003a, uuid = 0000ff09-0000-1000-8000-00805f9b34fb
+handle = 0x003b, char properties = 0x0a, char value handle = 0x003c, uuid = 0000ff0a-0000-1000-8000-00805f9b34fb
+handle = 0x003d, char properties = 0x02, char value handle = 0x003e, uuid = 0000ff0b-0000-1000-8000-00805f9b34fb
+handle = 0x003f, char properties = 0x1a, char value handle = 0x0040, uuid = 0000ff0c-0000-1000-8000-00805f9b34fb
+handle = 0x0042, char properties = 0x02, char value handle = 0x0043, uuid = 0000ff0d-0000-1000-8000-00805f9b34fb
+handle = 0x0044, char properties = 0x2a, char value handle = 0x0045, uuid = 0000ff0e-0000-1000-8000-00805f9b34fb
+handle = 0x0047, char properties = 0x1a, char value handle = 0x0048, uuid = 0000ff0f-0000-1000-8000-00805f9b34fb
+handle = 0x004a, char properties = 0x02, char value handle = 0x004b, uuid = 0000ff10-0000-1000-8000-00805f9b34fb
+handle = 0x004c, char properties = 0x2a, char value handle = 0x004d, uuid = 0000ff11-0000-1000-8000-00805f9b34fb
+handle = 0x004f, char properties = 0x02, char value handle = 0x0050, uuid = 0000ff12-0000-1000-8000-00805f9b34fb
+handle = 0x0051, char properties = 0x02, char value handle = 0x0052, uuid = 0000ff13-0000-1000-8000-00805f9b34fb
+handle = 0x0053, char properties = 0x0a, char value handle = 0x0054, uuid = 0000ff14-0000-1000-8000-00805f9b34fb
+handle = 0x0055, char properties = 0x0a, char value handle = 0x0056, uuid = 0000ff15-0000-1000-8000-00805f9b34fb
+handle = 0x0057, char properties = 0x9b, char value handle = 0x0058, uuid = 0000ff16-0000-1000-8000-00805f9b34fb
+handle = 0x0059, char properties = 0x02, char value handle = 0x005a, uuid = 0000ff17-0000-1000-8000-00805f9b34fb
+
+gratttool -b <INSERT ADDRESS HERE> --char-write-req -a 0x2c -n $(echo -n "M0DUL0CTF" | md5sum | awk '{print $1}' | head -c 20 | xxd -ps)
+
+How to get the fourth flag :
+
+Reference : docs/hints/flag4.md, Device Name UUID 0x2a00, value handle 0x0016
+
+gratttool -b <INSERT ADDRESS HERE> --char-read -a 0x0016 | cut -d':' -f2 | xxd -r -p; echo
+
+Output : 2b00042f7481c7b056c4b410d28f33cf
+
+gratttool -b <INSERT ADDRESS HERE> --char-write-req -a 0x002c -n $(echo -n "2b00042f7481c7b056c4b410d28f33cf" | head -c 20 | xxd -ps)
+
+How to get the fifth flag :
+
+Reference : docs/hints/flag5.md, UUID 0xff05, handle 0x0032
+
+gratttool -b <INSERT ADDRESS HERE> --char-read -a 0x0032 | cut -d':' -f2 | xxd -r -p; echo
+
+gratttool -b <INSERT ADDRESS HERE> --char-write-req -a 0x0032 -n 41
+
+gratttool -b <INSERT ADDRESS HERE> --char-read -a 0x0032 | cut -d':' -f2 | xxd -r -p; echo
+
+Output : 3873c0270763568cf7aa
+
+gratttool -b <INSERT ADDRESS HERE> --char-write-req -a 0x002c -n $(echo -n "3873c0270763568cf7aa" | xxd -ps)
+
+How to get the sixth flag :
+
+Reference : docs/hints/flag6.md, UUID 0xff06, handle 0x0034
+
+gratttool -b <INSERT ADDRESS HERE> --char-read -a 0x0034 | cut -d':' -f2 | xxd -r -p; echo
+
+gratttool -b <INSERT ADDRESS HERE> --char-write-req -a 0x0034 -n $(echo -n "yo" | xxd -ps)
+
+gratttool -b <INSERT ADDRESS HERE> --char-read -a 0x0034 | cut -d':' -f2 | xxd -r -p; echo
+
+Output : c55c6314b3db0a6128af
+
+gratttool -b <INSERT ADDRESS HERE> --char-write-req -a 0x002c -n $(echo -n "c55c6314b3db0a6128af" | xxd -ps)
+
+How to get the seventh flag :
+
+Reference : docs/hints/flag7.md, UUID 0xff07, handle 0x0036
+
+gratttool -b <INSERT ADDRESS HERE> --char-read -a 0x0036 | cut -d':' -f2 | xxd -r -p; echo
+
+gratttool -b <INSERT ADDRESS HERE> --char-write-req -a 0x0036 -n 07
+
+gratttool -b <INSERT ADDRESS HERE> --char-read -a 0x0036 | cut -d':' -f2 | xxd -r -p; echo
+
+Output : 1179080b29f8da16ad66
+
+gratttool -b <INSERT ADDRESS HERE> --char-write-req -a 0x002c -n $(echo -n "1179080b29f8da16ad66" | xxd -ps)
+
+How to get the eighth flag :
+
+Reference : docs/hints/flag8.md, UUIDs 0xff08/0xff09, handles 0x0038/0x003a
+
+gratttool -b <INSERT ADDRESS HERE> --char-read -a 0x0038 | cut -d':' -f2 | xxd -r -p; echo
+
+gratttool -b <INSERT ADDRESS HERE> --char-write-req -a 0x003a -n C9
+
+gratttool -b <INSERT ADDRESS HERE> --char-read -a 0x0038 | cut -d':' -f2 | xxd -r -p; echo
+
+Output : f8b136d937fad6a2be9f
+
+gratttool -b <INSERT ADDRESS HERE> --char-write-req -a 0x002c -n $(echo -n "f8b136d937fad6a2be9f" | xxd -ps)
+
+How to get the ninth flag :
+
+Reference : docs/hints/flag9.md, UUID 0xff0a, handle 0x003c
+
+gratttool -b <INSERT ADDRESS HERE> --char-read -a 0x003c | cut -d':' -f2 | xxd -r -p; echo
+
+gratttool -b <INSERT ADDRESS HERE> --char-write-req -a 0x003c -n D1
+
+gratttool -b <INSERT ADDRESS HERE> --char-read -a 0x003c | cut -d':' -f2 | xxd -r -p; echo
+
+Output : 933c1fcfa8ed52d2ec05
+
+gratttool -b <INSERT ADDRESS HERE> --char-write-req -a 0x002c -n $(echo -n "933c1fcfa8ed52d2ec05" | xxd -ps)
+
+How to get the tenth flag :
+
+Reference : docs/hints/flag10.md, UUID 0xff0b, handle 0x003e
+
+gratttool -b <INSERT ADDRESS HERE> --char-read -a 0x003e | cut -d':' -f2 | xxd -r -p; echo
+
+for i in {1..1001}; do gratttool -b <INSERT ADDRESS HERE> --char-read -a 0x003e >/dev/null; done
+
+gratttool -b <INSERT ADDRESS HERE> --char-read -a 0x003e | cut -d':' -f2 | xxd -r -p; echo
+
+Output : 6ffcd214ffebdc0d069e
+
+gratttool -b <INSERT ADDRESS HERE> --char-write-req -a 0x002c -n $(echo -n "6ffcd214ffebdc0d069e" | xxd -ps)
+
+How to get the eleventh flag :
+
+Reference : docs/hints/flag11.md, UUID 0xff0c, handle 0x0040
+
+gratttool -b <INSERT ADDRESS HERE> --char-read -a 0x0040 | cut -d':' -f2 | xxd -r -p; echo
+
+sudo gratttool -b <INSERT ADDRESS HERE> --char-write-req -a 0x0040 -n 69 --listen
+
+Notification flag : 5ec3772bcd00cf06d8eb
+
+Press Ctrl-C after the flag appears.
+
+gratttool -b <INSERT ADDRESS HERE> --char-write-req -a 0x002c -n $(echo -n "5ec3772bcd00cf06d8eb" | xxd -ps)
+
+How to get the twelfth flag :
+
+Reference : docs/hints/flag12.md, UUIDs 0xff0d/0xff0e, handles 0x0043/0x0045
+
+gratttool -b <INSERT ADDRESS HERE> --char-read -a 0x0043 | cut -d':' -f2 | xxd -r -p; echo
+
+sudo gratttool -b <INSERT ADDRESS HERE> --char-write-req -a 0x0045 -n 69 --listen
+
+Indication flag : c7b86dd121848c77c113
+
+Press Ctrl-C after the flag appears.
+
+gratttool -b <INSERT ADDRESS HERE> --char-write-req -a 0x002c -n $(echo -n "c7b86dd121848c77c113" | xxd -ps)
+
+How to get the thirteenth flag :
+
+Reference : docs/hints/flag13.md, UUID 0xff0f, handle 0x0048
+
+gratttool -b <INSERT ADDRESS HERE> --char-read -a 0x0048 | cut -d':' -f2 | xxd -r -p; echo
+
+sudo gratttool -b <INSERT ADDRESS HERE> --char-write-req -a 0x0048 -n 69 --listen
+
+Ignore first message : U no want this msg
+
+Notification flag : c9457de5fd8cafe349fd
+
+Press Ctrl-C after the flag appears.
+
+gratttool -b <INSERT ADDRESS HERE> --char-write-req -a 0x002c -n $(echo -n "c9457de5fd8cafe349fd" | xxd -ps)
+
+How to get the fourteenth flag :
+
+Reference : docs/hints/flag14.md, UUIDs 0xff10/0xff11, handles 0x004b/0x004d
+
+gratttool -b <INSERT ADDRESS HERE> --char-read -a 0x004b | cut -d':' -f2 | xxd -r -p; echo
+
+sudo gratttool -b <INSERT ADDRESS HERE> --char-write-req -a 0x004d -n 69 --listen
+
+Ignore first message : U no want this msg
+
+Indication flag : b6f3a47f207d38e16ffa
+
+Press Ctrl-C after the flag appears.
+
+gratttool -b <INSERT ADDRESS HERE> --char-write-req -a 0x002c -n $(echo -n "b6f3a47f207d38e16ffa" | xxd -ps)
+
+How to get the fifteenth flag :
+
+Reference : docs/hints/flag15.md, UUID 0xff12, handle 0x0050
+
+gratttool -b <INSERT ADDRESS HERE> --char-read -a 0x0050 | cut -d':' -f2 | xxd -r -p; echo
+
+sudo gratttool --bdaddr show
+
+sudo gratttool --bdaddr 11:22:33:44:55:66
+
+If gratttool says "Reset device manually" (required by the Intel adapter used in the live test) :
+
+sudo rfkill block bluetooth
+
+sudo rfkill unblock bluetooth
+
+sudo systemctl restart bluetooth
+
+gratttool --bdaddr show
+
+gratttool --scan 3
+
+gratttool -b <INSERT ADDRESS HERE> --char-read -a 0x0050 | cut -d':' -f2 | xxd -r -p; echo
+
+Output : aca16920583e42bdcf5f
+
+gratttool -b <INSERT ADDRESS HERE> --char-write-req -a 0x002c -n $(echo -n "aca16920583e42bdcf5f" | xxd -ps)
+
+sudo gratttool --bdaddr <ORIGINAL CLIENT ADDRESS>
+
+sudo rfkill block bluetooth
+
+sudo rfkill unblock bluetooth
+
+sudo systemctl restart bluetooth
+
+gratttool --bdaddr show
+
+How to get the sixteenth flag :
+
+Reference : docs/hints/flag16.md, UUID 0xff13, handle 0x0052
+
+gratttool -b <INSERT ADDRESS HERE> --char-read -a 0x0052 | cut -d':' -f2 | xxd -r -p; echo
+
+sudo gratttool -b <INSERT ADDRESS HERE> --mtu 444 --char-read -a 0x0052 | sed -n 's/^Characteristic value\/descriptor: //p' | xxd -r -p; echo
+
+Output : b1e409e5a4eaf9fe5158
+
+gratttool -b <INSERT ADDRESS HERE> --char-write-req -a 0x002c -n $(echo -n "b1e409e5a4eaf9fe5158" | xxd -ps)
+
+sudo gratttool -m 517
+
+How to get the seventeenth flag :
+
+Reference : docs/hints/flag17.md, UUID 0xff14, handle 0x0054
+
+gratttool -b <INSERT ADDRESS HERE> --char-read -a 0x0054 | cut -d':' -f2 | xxd -r -p; echo
+
+gratttool -b <INSERT ADDRESS HERE> --char-write-req -a 0x0054 -n $(echo -n "hello" | xxd -ps)
+
+gratttool -b <INSERT ADDRESS HERE> --char-read -a 0x0054 | cut -d':' -f2 | xxd -r -p; echo
+
+Output : d41d8cd98f00b204e980
+
+gratttool -b <INSERT ADDRESS HERE> --char-write-req -a 0x002c -n $(echo -n "d41d8cd98f00b204e980" | xxd -ps)
+
+How to get the eighteenth flag :
+
+Reference : docs/hints/flag18.md, UUID 0xff15, handle 0x0056
+
+gratttool -b <INSERT ADDRESS HERE> --char-read -a 0x0056 | cut -d':' -f2 | xxd -r -p; echo
+
+sudo gratttool -b <INSERT ADDRESS HERE> --char-write-req -a 0x0056 -n 69 --listen
+
+Hidden notification flag : fc920c68b6006169477b
+
+Press Ctrl-C after the flag appears.
+
+gratttool -b <INSERT ADDRESS HERE> --char-write-req -a 0x002c -n $(echo -n "fc920c68b6006169477b" | xxd -ps)
+
+How to get the nineteenth flag :
+
+Reference : docs/hints/flag19.md, UUID 0xff16, handle 0x0058
+
+gratttool -b <INSERT ADDRESS HERE> --char-read -a 0x0058 | cut -d':' -f2 | xxd -r -p; echo
+
+sudo gratttool -b <INSERT ADDRESS HERE> --char-write-req -a 0x0058 -n 69 --listen
+
+Notification half : 07e4a0cc48
+
+Press Ctrl-C after the notification half appears.
+
+gratttool -b <INSERT ADDRESS HERE> --char-read -a 0x0058 | cut -d':' -f2 | xxd -r -p; echo
+
+Read half : fbb966958f
+
+gratttool -b <INSERT ADDRESS HERE> --char-write-req -a 0x002c -n $(echo -n "fbb966958f07e4a0cc48" | xxd -ps)
+
+How to get the last flag :
+
+Reference : docs/hints/flag20.md, UUID 0xff17, handle 0x005a
+
+Author profile : https://github.com/gluppler
+
+Hash input : @gluppler
+
+gratttool -b <INSERT ADDRESS HERE> --char-read -a 0x005a | cut -d':' -f2 | xxd -r -p; echo
+
+echo -n "@gluppler" | md5sum
+
+Output : 471b228968e09e9a328f9fb6195b5067
+
+gratttool -b <INSERT ADDRESS HERE> --char-write-req -a 0x002c -n $(echo -n "@gluppler" | md5sum | awk '{print $1}' | head -c 20 | xxd -ps)
+
+Final score :
+
+gratttool -b <INSERT ADDRESS HERE> --char-read -a 0x002a|awk -F: '{print $2}'|tr -d ' '|xxd -r -p;printf '\n'
+
+Verified live output : Score:20/20

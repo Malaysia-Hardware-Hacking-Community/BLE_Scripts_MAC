@@ -148,9 +148,10 @@ async def find_device(
     If *callback* is given it is invoked for every device seen before the match.
 
     Note:
-        On macOS ``BLEDevice.address`` is a CoreBluetooth-generated UUID scoped
-        to this Mac, not the peripheral's real MAC address, and it changes
-        between reboots. Prefer a name substring for repeatable use.
+        On Windows (and Linux) ``BLEDevice.address`` is the peripheral's real
+        Bluetooth MAC, so either the address or a name substring works. On macOS
+        it is a CoreBluetooth-generated UUID scoped to this Mac, not the real
+        MAC, and it changes between reboots — there, prefer a name substring.
     """
     needle = str(identifier).casefold()
 

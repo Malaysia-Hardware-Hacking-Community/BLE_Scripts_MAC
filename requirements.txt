@@ -1,8 +1,10 @@
-# Runtime dependencies for BLE_Scripts_MAC.
+# Runtime dependencies for WAMBLE (Windows And Mac BLE).
 # Requires Python 3.11 or newer (uses asyncio.timeout and PEP 604 unions).
 #
 # On macOS, bleak pulls in the CoreBluetooth bindings automatically:
 #   pyobjc-core, pyobjc-framework-corebluetooth, pyobjc-framework-libdispatch
+# On Windows, bleak uses the built-in WinRT Bluetooth API — no extra packages.
+# On Linux, bleak uses BlueZ over D-Bus (for reference; WAMBLE targets mac/win).
 
 bleak>=3.0.2,<4
 rich>=13.0

@@ -32,6 +32,9 @@ async def main():
     client = None
     try:
         client = await connect(args.device, args.scan_timeout)
+        if client is None:
+            console.print("[red]Failed to connect.[/red]")
+            return
         chars = {
             char.uuid.casefold(): char
             for service in client.services

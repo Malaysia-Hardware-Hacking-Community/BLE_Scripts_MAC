@@ -13,6 +13,35 @@ from ble_common import parse_advertisement_data, short_uuid
 console = Console()
 
 
+def service_uuid_matches(service_filter: str, adv_service_uuids) -> bool:
+    """True if any advertised service UUID matches *service_filter*.
+
+    macOS CoreBluetooth reports SIG UUIDs in their full 128-bit form
+    (e.g. ``0000180f-0000-1000-8000-00805f9b34fb``) while users habitually type
+    the 16-bit short form (``180f``); Linux advertises the short form directly.
+    So the filter and each advertised UUID are reduced to the same canonical
+    form with :func:`short_uuid` before comparing, which makes ``"180f"``,
+    ``"0x180F"`` and the full 128-bit UUID all match the same device in either
+    direction.
+
+    The comparison is on the whole UUID, not a substring: a substring test
+    against the 128-bit form would make fragments of the Bluetooth base suffix
+    (``1000``, ``8000``, ``34fb`` …) match every SIG device.
+    """
+    needle = service_filter.strip().casefold()
+    if needle.startswith("0x"):
+        needle = needle[2:]
+    if not needle:
+        return False
+    needle_canon = short_uuid(needle).casefold()
+    for uuid in adv_service_uuids or []:
+        if needle == str(uuid).casefold():  # exact, as the user typed it
+            return True
+        if needle_canon == short_uuid(uuid).casefold():  # 16-bit <-> 128-bit
+            return True
+    return False
+
+
 def make_table(
     found: Dict[str, Tuple[Any, Any]],
 ) -> Tuple[Table, List[Tuple[str, Any, Any]]]:
@@ -101,19 +130,10 @@ async def main():
             if args.name.casefold() not in name.casefold():
                 return
 
-        # Filter by service UUID if provided
-        if args.service:
-            # Normalize to lowercase 16-bit hex
-            service_filter = args.service.lower().replace("0x", "")
-            adv_uuids = adv.service_uuids or []
-            matched = False
-            for uuid in adv_uuids:
-                uuid_str = str(uuid).lower().replace("-", "")
-                if uuid_str.endswith(service_filter) or uuid_str == service_filter:
-                    matched = True
-                    break
-            if not matched:
-                return
+        # Filter by service UUID if provided. See service_uuid_matches for why
+        # a plain endswith() is wrong on macOS.
+        if args.service and not service_uuid_matches(args.service, adv.service_uuids):
+            return
 
         # RSSI filter
         if args.min_rssi is not None and (adv.rssi or 0) < args.min_rssi:
