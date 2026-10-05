@@ -1,8 +1,9 @@
-"""Request a connection-parameter range from a peripheral.
+"""Inspect (or attempt to set) a peripheral's preferred connection parameters.
 
-The relevant object is the **Connection Parameter Range** *descriptor*
-(``0x2A0E``) on the GAP service (``0x1800``). It is eight bytes, little-endian,
-per the Bluetooth core specification Vol 3, Part G, 7.8.5:
+The relevant object is the **Peripheral Preferred Connection Parameters**
+(PPCP) *characteristic* (``0x2A04``) on the Generic Access service
+(``0x1800``). It is eight bytes, little-endian, per the Bluetooth core
+specification (GATT, Generic Access Profile service):
 
 ===========  ======  =============================
 Offset       Field   Meaning
@@ -15,14 +16,17 @@ Offset       Field   Meaning
 
 macOS caveat
 ------------
-Writing this descriptor is only a *request*: the peripheral may accept,
-ignore, or clamp it. The values actually in force are negotiated in HCI and
-reported over the link layer, which CoreBluetooth does not expose to
-applications. Linux ``gatttool``/``btmgmt`` can read them back because they
-bind to BlueZ's HCI socket.
+PPCP reports the peripheral's *preferred* parameters, not the values actually
+in force. The live parameters are negotiated in HCI / over the link layer,
+which CoreBluetooth does not expose to applications. Linux
+``gatttool``/``btmgmt`` can read the negotiated values because they bind to
+BlueZ's HCI socket.
 
-So this script can *request* a range but cannot *report* what was applied.
-``--get`` says so rather than printing numbers it did not measure.
+Also note PPCP is defined read-only: a central cannot change a connection's
+parameters with a GATT write (that needs an L2CAP Connection Parameter Update
+Request, which CoreBluetooth does not expose either). ``--set`` therefore
+attempts the write but most peripherals reject it, and even a success would not
+change the live connection. ``--get`` reads and decodes the preferred values.
 """
 
 import argparse
@@ -34,12 +38,12 @@ from bleak import BleakClient, normalize_uuid_str
 from rich.console import Console
 from rich.table import Table
 
-from ble_common import connect
+from ble_common import connect, short_uuid
 
 console = Console()
 
 GAP_SERVICE_UUID = normalize_uuid_str("1800")
-CONN_PARAM_RANGE_UUID = normalize_uuid_str("2a0e")
+PPCP_UUID = normalize_uuid_str("2a04")  # Peripheral Preferred Connection Parameters
 
 INTERVAL_UNIT_MS = 1.25
 TIMEOUT_UNIT_MS = 10.0
@@ -74,16 +78,37 @@ def unpack_range(value: bytes) -> dict | None:
     }
 
 
-def find_conn_param_descriptor(client: BleakClient):
-    """Locate the 0x2A0E descriptor on the GAP service, or None.
+def find_ppcp_characteristic(client: BleakClient):
+    """Locate the 0x2A04 PPCP characteristic (on the GAP service), or None.
 
-    ``BleakGATTServiceCollection.get_descriptor`` only accepts an integer
-    handle, so match on UUID against the collection's descriptor index.
+    PPCP is a characteristic, not a descriptor, so match on UUID against the
+    collection's characteristic index.
     """
-    for desc in client.services.descriptors.values():
-        if str(desc.uuid).casefold() == CONN_PARAM_RANGE_UUID:
-            return desc
+    for char in client.services.characteristics.values():
+        if str(char.uuid).casefold() == PPCP_UUID:
+            return char
     return None
+
+
+def show_gap_contents(client: BleakClient) -> None:
+    """List what the Generic Access (0x1800) service actually exposes.
+
+    Printed when PPCP is absent, so a negative result still tells the operator
+    what the device's GAP service does contain.
+    """
+    gap = next(
+        (s for s in client.services if str(s.uuid).casefold() == GAP_SERVICE_UUID),
+        None,
+    )
+    if gap is None:
+        console.print("[dim]No Generic Access (0x1800) service found on this device.[/dim]")
+        return
+    console.print("[cyan]Generic Access (0x1800) characteristics present:[/cyan]")
+    for ch in gap.characteristics:
+        props = ", ".join(ch.properties) or "—"
+        console.print(
+            f"  [magenta]{short_uuid(ch.uuid)}[/magenta] (handle {ch.handle}) [dim]{props}[/dim]"
+        )
 
 
 def describe(params: dict) -> Table:
@@ -128,9 +153,10 @@ async def main() -> None:
     parser = argparse.ArgumentParser(
         description="Request or inspect a peripheral's connection parameter range.",
         epilog=(
-            "This writes descriptor 0x2A0E on the GAP service (0x1800). The "
-            "peripheral may ignore the request, and macOS cannot report the "
-            "negotiated result."
+            "This reads (or, with --set, attempts to write) the PPCP "
+            "characteristic 0x2A04 on the Generic Access service (0x1800). PPCP "
+            "is read-only, so --set is usually rejected, and macOS cannot report "
+            "the negotiated connection parameters in any case."
         ),
     )
     parser.add_argument("device", help="Device address or name")
@@ -195,49 +221,65 @@ async def main() -> None:
         if client is None:
             sys.exit(1)
 
-        desc = find_conn_param_descriptor(client)
-        if desc is None:
+        char = find_ppcp_characteristic(client)
+        if char is None:
             console.print(
-                "[red]Device does not expose a Connection Parameter Range "
-                "descriptor (0x2A0E) on its GAP service.[/red]"
+                "[yellow]This device does not expose the optional Peripheral "
+                "Preferred Connection Parameters characteristic (0x2A04).[/yellow]\n"
+                "[dim]That is normal — many peripherals (Govee LED controllers "
+                "included) omit it. There are no preferred parameters to read, and "
+                "nothing to set; the OS negotiates the connection parameters "
+                "itself and macOS does not expose the result.[/dim]"
             )
-            sys.exit(2)
+            show_gap_contents(client)
+            console.print(
+                f"[dim]For the device's full attribute table, run:  "
+                f"enum_ble.py {args.device!r} --readable[/dim]"
+            )
+            return  # a legitimate negative result, not an error
 
         if args.get:
             try:
-                raw = await client.read_gatt_descriptor(desc)
+                raw = await client.read_gatt_char(char)
             except Exception as exc:
                 console.print(f"[red]Read failed: {exc!r}[/red]")
                 sys.exit(2)
             params = unpack_range(raw)
             if params is None:
                 console.print(
-                    f"[yellow]Descriptor returned {len(raw)} byte(s); expected 8.[/yellow]"
+                    f"[yellow]Characteristic returned {len(raw)} byte(s); expected 8.[/yellow]"
                 )
                 sys.exit(2)
             console.print(
-                f"[cyan]Advertised connection parameter range "
-                f"(descriptor {desc.uuid}, handle {desc.handle}):[/cyan]"
+                f"[cyan]Preferred connection parameters "
+                f"(characteristic {char.uuid}, handle {char.handle}):[/cyan]"
             )
             console.print(describe(params))
             console.print(
-                "[dim]These are the range the peripheral advertises, not the "
-                "values in force. macOS cannot report the negotiated result.[/dim]"
+                "[dim]These are the peripheral's preferred values, not the "
+                "parameters in force. macOS cannot report the negotiated result.[/dim]"
             )
             return
 
         payload = pack_range(args.interval_min, args.interval_max, args.latency, args.timeout)
         try:
-            await client.write_gatt_descriptor(desc, payload)
+            await client.write_gatt_char(char, payload, response=True)
         except Exception as exc:
-            console.print(f"[red]Write to descriptor {desc.handle} failed: {exc!r}[/red]")
+            console.print(
+                f"[red]Write to characteristic {char.handle} failed: {exc!r}[/red]"
+            )
+            console.print(
+                "[dim]PPCP is read-only on most peripherals; this is expected. A "
+                "central cannot set connection parameters via GATT.[/dim]"
+            )
             sys.exit(2)
 
-        console.print("[green]Connection parameter range requested.[/green]")
+        console.print("[green]PPCP write accepted by the peripheral.[/green]")
         console.print(describe(unpack_range(payload)))
         console.print(
-            "[yellow]The peripheral may clamp or ignore this. macOS gives no "
-            "way to confirm what was applied.[/yellow]"
+            "[yellow]Even when the write succeeds it only updates the preferred "
+            "values; it does not change the live connection, and macOS gives no "
+            "way to confirm what is in force.[/yellow]"
         )
 
     except Exception as exc:

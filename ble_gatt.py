@@ -92,6 +92,13 @@ def resolve_target(client, specifier: str | int) -> Optional[Any]:
         desc = client.services.get_descriptor(handle)
         if desc is not None:
             return desc
+        # Handle-shaped but no handle matched. Only fall through to UUID
+        # matching when the token is long enough to be a real 16-bit UUID
+        # (>=4 hex digits); otherwise a bare handle like "8" would spuriously
+        # match a digit inside a 128-bit UUID (e.g. the "8" in ...0809...).
+        bare = text[2:] if text[:2].lower() == "0x" else text
+        if len(bare) < 4:
+            return None
 
     for service in client.services:
         for char in service.characteristics:

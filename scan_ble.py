@@ -52,9 +52,16 @@ def make_table(
     """
     table = Table(title="Nearby BLE Devices", header_style="bold cyan")
     table.add_column("#", justify="right", style="yellow")
-    table.add_column("Name", style="green")
-    # Keep the address on one line. Use --plain if the terminal is still too narrow.
-    table.add_column("Address / Identifier", style="dim", no_wrap=True, overflow="fold")
+    # Fold rather than ellipsize the name: a truncated "SomeName…" cannot be
+    # copied back in as a target, which is the whole point of the column.
+    table.add_column("Name", style="green", overflow="fold", min_width=12)
+    # Reserve the full width of an address (a 36-char macOS CoreBluetooth UUID,
+    # or a 17-char MAC on Win/Linux) so it is shown complete on one line and can
+    # be copied verbatim. no_wrap without a min_width lets rich crop it in a
+    # narrow terminal, which yields an unusable, truncated identifier.
+    table.add_column(
+        "Address / Identifier", style="dim", no_wrap=True, min_width=36
+    )
     table.add_column("RSSI", justify="right")
     table.add_column("Advertised services", overflow="fold")
     table.add_column("Manufacturer data", overflow="fold")

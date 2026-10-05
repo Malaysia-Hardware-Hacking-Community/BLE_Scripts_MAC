@@ -20,23 +20,30 @@ BATTERY_SERVICE_UUID = normalize_uuid_str("180f")
 BATTERY_LEVEL_UUID = normalize_uuid_str("2a19")
 
 
-def find_battery_characteristic(client: BleakClient):
+def find_battery_characteristic(client: BleakClient, char_uuid: str = BATTERY_LEVEL_UUID):
     """Locate the Battery Level characteristic, or None if there isn't one.
 
-    Returns None if the device has no Battery Level characteristic *or* if GATT
-    service discovery failed outright.
+    *char_uuid* is the characteristic to look for (defaults to 0x2A19); it may
+    be a full 128-bit UUID, a 16-bit short form, or a substring. Returns None if
+    the device has no matching characteristic *or* if GATT service discovery
+    failed outright.
     """
+    needle = str(char_uuid).lower()
     try:
-        # bleak raises if the device exposes more than one 2A19; fall through
+        # bleak raises if the device exposes more than one match; fall through
         # to the substring scan in that case.
-        char = client.services.get_characteristic(BATTERY_LEVEL_UUID)
-        if char is not None:
-            return char
-        # Fall back to a substring scan for vendor-specific variants.
-        needle = short_uuid(BATTERY_LEVEL_UUID)
+        try:
+            char = client.services.get_characteristic(char_uuid)
+            if char is not None:
+                return char
+        except Exception:
+            pass
+        # Fall back to a substring scan (handles short forms and vendor variants).
+        canon = short_uuid(needle)
         for _svc, chars in enumerate_services(client):
             for ch in chars.values():
-                if needle in str(ch.uuid).lower():
+                uuid_l = str(ch.uuid).lower()
+                if needle in uuid_l or canon == short_uuid(uuid_l):
                     return ch
     except Exception:
         # Includes "Service Discovery has not been performed yet", which is what
@@ -45,24 +52,21 @@ def find_battery_characteristic(client: BleakClient):
     return None
 
 
-async def read_battery_level(client: BleakClient) -> int | None:
-    """Read the battery percentage, or None if unavailable.
+async def read_battery_raw(
+    client: BleakClient, char_uuid: str = BATTERY_LEVEL_UUID
+):
+    """Read the Battery Level characteristic, returning (char, raw_bytes).
 
-    Returns an int 0-100. Per the Battery Service spec the first byte is the
-    level in percent, so any value outside 0-100 means the device is not
-    reporting a conforming Battery Level characteristic.
+    *char* is None when no matching characteristic exists; *raw_bytes* is None
+    when it exists but is not readable or the read failed.
     """
-    char = find_battery_characteristic(client)
+    char = find_battery_characteristic(client, char_uuid)
     if char is None or "read" not in char.properties:
-        return None
+        return char, None
     try:
-        value = await client.read_gatt_char(char)
+        return char, bytes(await client.read_gatt_char(char))
     except Exception:
-        return None
-    if value and len(value) > 0:
-        level = value[0]
-        return level if 0 <= level <= 100 else None
-    return None
+        return char, None
 
 
 async def main() -> None:
@@ -106,36 +110,37 @@ async def main() -> None:
 
         console.print(f"[cyan]Reading battery from {args.device}...[/cyan]")
 
-        pct = await read_battery_level(client)
+        char, raw = await read_battery_raw(client, args.char)
 
-        if pct is not None:
-            if args.format == "percentage":
-                console.print(f"[green]Battery: {pct}%[/green]")
-            elif args.format == "raw":
-                console.print(f"[green]Raw: {pct}[/green]")
-            else:
-                console.print(f"[green]Battery: {pct}[/green]")
-            return
-
-        char = find_battery_characteristic(client)
         if char is None:
             console.print(
-                "[yellow]Could not read a Battery Level characteristic. Either "
+                "[yellow]Could not find a Battery Level characteristic. Either "
                 "the device does not expose one, or GATT service discovery "
                 "failed (it commonly drops mid-discovery).[/yellow]"
             )
             return
 
-        console.print(
-            f"[yellow]Found {char.uuid} (handle {char.handle}) but it is not "
-            f"readable or did not return a valid level.[/yellow]"
-        )
-        if "read" in char.properties:
-            try:
-                raw = await client.read_gatt_char(char)
-                console.print(f"  Raw: {fmt_bytes(raw)}")
-            except Exception as exc:
-                console.print(f"  [red]Read failed: {exc!r}[/red]")
+        if raw is None or len(raw) == 0:
+            console.print(
+                f"[yellow]Found {char.uuid} (handle {char.handle}) but it is not "
+                f"readable or returned no data.[/yellow]"
+            )
+            return
+
+        # Per the Battery Service spec the first byte is the level in percent.
+        level = raw[0]
+        if args.format == "raw":
+            console.print(f"[green]Raw: {fmt_bytes(raw)}[/green]")
+        elif args.format == "decimal":
+            console.print(f"[green]Battery: {level}[/green]")
+        else:  # percentage
+            if 0 <= level <= 100:
+                console.print(f"[green]Battery: {level}%[/green]")
+            else:
+                console.print(
+                    f"[yellow]Level byte {level} is outside 0-100 (non-conforming); "
+                    f"raw {fmt_bytes(raw)}.[/yellow]"
+                )
 
     except Exception as exc:
         console.print(f"[red]{type(exc).__name__}: {exc!r}[/red]")

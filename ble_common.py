@@ -153,10 +153,13 @@ async def find_device(
         it is a CoreBluetooth-generated UUID scoped to this Mac, not the real
         MAC, and it changes between reboots — there, prefer a name substring.
     """
-    needle = str(identifier).casefold()
+    # Strip surrounding whitespace: an address pasted from a wrapped table cell
+    # or a shell prompt often carries a leading/trailing space or newline, which
+    # would otherwise defeat the exact address comparison below.
+    needle = str(identifier).strip().casefold()
 
     def _matches(device: BLEDevice, adv: Any) -> bool:
-        if needle == str(device.address).casefold():
+        if needle == str(device.address).strip().casefold():
             return True
         name = (device.name or adv.local_name or "").casefold()
         return bool(needle) and needle in name
@@ -347,24 +350,47 @@ class GATTTableBuilder:
         return table
 
 
-def print_gatt_tables(client: BleakClient) -> None:
-    """Print a connected client's full GATT tree: characteristics, then descriptors.
+def print_services_table(client: BleakClient) -> None:
+    """Print just the services: UUID, handle, description and characteristic count."""
+    table = Table(title="GATT Services", header_style="bold cyan")
+    # One UUID column via short_uuid: compact "1800" for SIG services, full
+    # 128-bit for vendor ones. Two UUID columns would crowd out the rest.
+    table.add_column("UUID", style="cyan", no_wrap=True)
+    table.add_column("Handle", justify="right", style="dim")
+    table.add_column("Description", style="blue", overflow="fold")
+    table.add_column("Chars", justify="right", style="green")
 
-    This is the single enumeration used by the interactive client, so that the
-    ``services``, ``characteristics`` and ``descriptors`` commands all show the
-    same complete picture rather than each hiding handles the others expose.
-    """
+    count = 0
+    for service in client.services:
+        table.add_row(
+            short_uuid(service.uuid),
+            str(getattr(service, "handle", "—")),
+            getattr(service, "description", None) or "—",
+            str(len(service.characteristics)),
+        )
+        count += 1
+    if count:
+        console.print(table)
+    else:
+        console.print("[dim]No services exposed.[/dim]")
+
+
+def print_characteristics_table(client: BleakClient) -> None:
+    """Print just the characteristics table."""
     builder = GATTTableBuilder(title="GATT Characteristics")
     builder.add_services(client)
     console.print(builder.build())
 
+
+def print_descriptors_table(client: BleakClient) -> None:
+    """Print just the descriptors table, or a note when there are none."""
     desc_table = Table(title="GATT Descriptors", header_style="bold cyan")
     desc_table.add_column("Characteristic", style="cyan", no_wrap=True)
     desc_table.add_column("Descriptor", style="magenta", no_wrap=True)
     desc_table.add_column("Handle", justify="right", style="dim")
 
     rows = 0
-    for _svc, chars in builder.services:
+    for _svc, chars in enumerate_services(client):
         for ch in chars.values():
             for desc in ch.descriptors:
                 desc_table.add_row(
@@ -376,6 +402,15 @@ def print_gatt_tables(client: BleakClient) -> None:
         console.print(desc_table)
     else:
         console.print("[dim]No descriptors exposed.[/dim]")
+
+
+def print_gatt_tables(client: BleakClient) -> None:
+    """Print a connected client's full GATT tree: characteristics, then descriptors.
+
+    Used by the CTF client's ``enum`` to show the complete picture at once.
+    """
+    print_characteristics_table(client)
+    print_descriptors_table(client)
 
 
 async def read_gatt_char(client: BleakClient, uuid_or_handle: str | int) -> Any:
@@ -447,6 +482,9 @@ __all__ = [
     "find_descriptor",
     "GATTTableBuilder",
     "print_gatt_tables",
+    "print_services_table",
+    "print_characteristics_table",
+    "print_descriptors_table",
     "read_gatt_char",
     "write_gatt_char",
     "parse_advertisement_data",

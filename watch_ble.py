@@ -17,8 +17,11 @@ console = Console()
 def build_table(latest: dict) -> Table:
     """Render the newest advertisement per device, strongest signal first."""
     table = Table(title="BLE Advertisement Monitor", header_style="bold cyan")
-    table.add_column("Name", style="green", no_wrap=True)
-    table.add_column("Identifier", style="dim", overflow="fold")
+    # Fold the name and reserve the full address width so both can be copied as
+    # a target (see scan_ble.make_table): no_wrap without a min_width lets rich
+    # crop a long name or a 36-char macOS address in a narrow terminal.
+    table.add_column("Name", style="green", overflow="fold", min_width=12)
+    table.add_column("Identifier", style="dim", no_wrap=True, min_width=36)
     table.add_column("RSSI", justify="right")
     table.add_column("Last seen")
     table.add_column("Services", overflow="fold")

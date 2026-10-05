@@ -17,6 +17,10 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TOOLKIT="$HERE"
 EXPLOITS="$HERE/BLE-Exploits"
 CAPTURES="$EXPLOITS/captures"
+# Scan results are cached here so one scan can feed many actions (see
+# pick_device). Per-PID path keeps concurrent TUIs from clobbering each other.
+SCAN_CACHE="${TMPDIR:-/tmp}/wamble_scan.$$.json"
+SCAN_SECONDS=8   # default scan duration for the picker
 
 if [[ -x "$HERE/.venv/bin/python" ]]; then
   PY="$HERE/.venv/bin/python"
@@ -30,62 +34,91 @@ if [[ -t 1 ]]; then
   CYAN=$'\033[36m'; GREEN=$'\033[32m'; YELLOW=$'\033[33m'
   RED=$'\033[31m'; MAGENTA=$'\033[35m'; BLUE=$'\033[34m'
   HL=$'\033[1;30;46m'   # bold black on cyan — the selected row
+  EL=$'\033[K'          # erase to end of line (kills leftovers without a full clear)
 else
-  RESET=''; BOLD=''; DIM=''; CYAN=''; GREEN=''; YELLOW=''; RED=''; MAGENTA=''; BLUE=''; HL=''
+  RESET=''; BOLD=''; DIM=''; CYAN=''; GREEN=''; YELLOW=''; RED=''; MAGENTA=''; BLUE=''; HL=''; EL=''
 fi
 W=66   # panel width
 
-cleanup(){ printf '\033[?25h%s' "$RESET"; }   # show cursor, reset colour
+cleanup(){ printf '\033[?25h%s' "$RESET"; rm -f "$SCAN_CACHE"; }   # show cursor, reset colour, drop scan cache
 trap cleanup EXIT INT TERM
 
 clear_screen(){ printf '\033[H\033[2J'; }
+home(){ printf '\033[H'; }            # cursor home, no erase — the basis of flicker-free redraw
+clear_below(){ printf '\033[J'; }     # erase from cursor to end of screen
 hide_cursor(){ printf '\033[?25l'; }
 show_cursor(){ printf '\033[?25h'; }
 
+# Visible terminal rows, read from the controlling tty so it is correct even
+# when stdout is redirected (as in the device picker's `menu >/dev/tty`).
+term_lines(){
+  local sz; sz=$(stty size </dev/tty 2>/dev/null) || sz=""
+  sz=${sz%% *}
+  [[ $sz =~ ^[0-9]+$ ]] && printf '%s' "$sz" || printf '24'
+}
+
 repeat(){ local n=$1 c=$2 out=''; while (( n-- > 0 )); do out+="$c"; done; printf '%s' "$out"; }
 
-top(){    printf '%s╭%s╮%s\n' "$CYAN" "$(repeat $((W-2)) '─')" "$RESET"; }
-bottom(){ printf '%s╰%s╯%s\n' "$CYAN" "$(repeat $((W-2)) '─')" "$RESET"; }
-mid(){    printf '%s├%s┤%s\n' "$CYAN" "$(repeat $((W-2)) '─')" "$RESET"; }
+# Each primitive ends its line with $EL so a redraw overwrites in place and
+# wipes any trailing characters, instead of blanking the whole screen first.
+top(){    printf '%s╭%s╮%s'"$EL"'\n' "$CYAN" "$(repeat $((W-2)) '─')" "$RESET"; }
+bottom(){ printf '%s╰%s╯%s'"$EL"'\n' "$CYAN" "$(repeat $((W-2)) '─')" "$RESET"; }
+mid(){    printf '%s├%s┤%s'"$EL"'\n' "$CYAN" "$(repeat $((W-2)) '─')" "$RESET"; }
 
 # row CONTENT [selected]  — full-width line inside the panel
 row(){
   local s=" $1" n sel="${2:-0}" pad
   n=${#s}; pad=$((W-2-n)); (( pad<0 )) && pad=0
   if [[ "$sel" == 1 ]]; then
-    printf '%s│%s%s%s%s│%s\n' "$CYAN" "$RESET$HL" "$s$(repeat $pad ' ')" "$RESET" "$CYAN" "$RESET"
+    printf '%s│%s%s%s%s│%s'"$EL"'\n' "$CYAN" "$RESET$HL" "$s$(repeat $pad ' ')" "$RESET" "$CYAN" "$RESET"
   else
-    printf '%s│%s%s%s│%s\n' "$CYAN" "$RESET" "$s$(repeat $pad ' ')" "$CYAN" "$RESET"
+    printf '%s│%s%s%s│%s'"$EL"'\n' "$CYAN" "$RESET" "$s$(repeat $pad ' ')" "$CYAN" "$RESET"
   fi
 }
 title_row(){
   local s=" $1" n pad; n=${#s}; pad=$((W-2-n)); (( pad<0 )) && pad=0
-  printf '%s│%s%s%s%s│%s\n' "$CYAN" "$BOLD$MAGENTA" "$s$(repeat $pad ' ')" "$RESET" "$CYAN" "$RESET"
+  printf '%s│%s%s%s%s│%s'"$EL"'\n' "$CYAN" "$BOLD$MAGENTA" "$s$(repeat $pad ' ')" "$RESET" "$CYAN" "$RESET"
 }
 
-banner(){
-  clear_screen
-  printf '%s%s  WAMBLE  %s·%s  Windows And Mac BLE toolkit & PoCs%s\n\n' \
+# banner_body draws without clearing (for flicker-free redraw); banner clears
+# first, for one-shot screens (run output, prompts).
+banner_body(){
+  printf '%s%s  WAMBLE  %s·%s  Windows And Mac BLE toolkit & PoCs%s'"$EL"'\n'"$EL"'\n' \
     "$BOLD" "$CYAN" "$DIM" "$RESET$BOLD$CYAN" "$RESET"
 }
-footer(){ printf '\n %s%s%s\n' "$DIM" "$1" "$RESET"; }
+banner(){ clear_screen; banner_body; }
+footer(){ printf '%s'"$EL"'\n %s%s%s'"$EL"'\n' '' "$DIM" "$1" "$RESET"; }
 
 # --- menu engine -----------------------------------------------------------
 # menu "Title" item1 item2 ...   -> sets REPLY_INDEX (-1 on q/back)
 REPLY_INDEX=-1
 menu(){
   local title="$1"; shift
-  local opts=("$@") n=$# sel=0 key k2
+  local opts=("$@") n=$# sel=0 top0=0 key k2 i win avail H
   hide_cursor
+  clear_screen            # one clean slate on entry; every frame after redraws in place
   while true; do
-    banner
+    # Fit the list to the terminal: show a scrolling window of `win` rows around
+    # the selection rather than letting a long list overflow and scroll.
+    H=$(term_lines)
+    avail=$(( H - 10 ))   # chrome: banner(2)+top/title/mid(3)+bottom(1)+footer(2)+2 scroll hints
+    (( avail < 3 )) && avail=3
+    win=$n; (( win > avail )) && win=$avail
+    (( sel < top0 )) && top0=$sel
+    (( sel >= top0 + win )) && top0=$(( sel - win + 1 ))
+    (( top0 > n - win )) && top0=$(( n - win ))
+    (( top0 < 0 )) && top0=0
+
+    home; banner_body
     top; title_row "$title"; mid
-    local i
-    for i in "${!opts[@]}"; do
-      if [[ $i -eq $sel ]]; then row "► ${opts[$i]}" 1; else row "  ${opts[$i]}" 0; fi
+    (( top0 > 0 )) && row "  ▲ $top0 more above" 0
+    for (( i = top0; i < top0 + win; i++ )); do
+      if (( i == sel )); then row "► ${opts[$i]}" 1; else row "  ${opts[$i]}" 0; fi
     done
+    (( top0 + win < n )) && row "  ▼ $(( n - top0 - win )) more below" 0
     bottom
     footer "↑/↓ or j/k · Enter select · q back"
+    clear_below           # wipe anything left from a taller previous screen
     IFS= read -rsn1 key
     case "$key" in
       $'\033') IFS= read -rsn2 -t 0.05 k2
@@ -118,12 +151,79 @@ run(){ # run a command, show output, pause
   IFS= read -r _ </dev/tty
 }
 
-need_device(){ # echoes a device name or empty (cancelled)
-  banner; ask "Target device (name substring or address)"
+# --- device picker ---------------------------------------------------------
+# need_device is called as  d="$(need_device)"  so ONLY the chosen identifier
+# may reach stdout. Every bit of UI (banner, menu, prompts) is therefore drawn
+# to /dev/tty — writing it to stdout would capture the ANSI banner into the
+# device name and break the match. The scan is cached in $SCAN_CACHE so one
+# scan feeds many actions; "Rescan now" refreshes it.
+
+run_scan_to_cache(){ # $1 = seconds; progress + table shown on the tty
+  local secs="${1:-$SCAN_SECONDS}"
+  "$PY" "$TOOLKIT/scan_ble.py" -t "$secs" --write-to "$SCAN_CACHE" >/dev/tty 2>&1
+  printf '\n %sPress Enter to choose a device…%s' "$DIM" "$RESET" >/dev/tty
+  IFS= read -r _ </dev/tty
 }
 
+# Emit "addr<TAB>rssi<TAB>name" per cached device, strongest signal first.
+parse_scan_cache(){
+  [[ -s "$SCAN_CACHE" ]] || return 0
+  "$PY" - "$SCAN_CACHE" <<'PYEOF'
+import json, sys
+try:
+    data = json.load(open(sys.argv[1]))
+except Exception:
+    sys.exit(0)
+devs = data.get("devices", []) or []
+devs.sort(key=lambda d: d.get("rssi") if d.get("rssi") is not None else -999,
+          reverse=True)
+for d in devs:
+    addr = str(d.get("address", "")).strip()
+    if not addr:
+        continue
+    rssi = d.get("rssi")
+    # Never emit an empty field: IFS=<tab> in the bash reader collapses runs of
+    # tabs, so an empty RSSI would merge columns and misalign the row.
+    rssi = "—" if rssi is None else str(rssi)
+    name = (d.get("name") or "(unnamed)").replace("\t", " ").replace("\n", " ")
+    print(f"{addr}\t{rssi}\t{name}")
+PYEOF
+}
+
+pick_device(){ # echoes a device identifier, or nothing if cancelled
+  [[ -s "$SCAN_CACHE" ]] || run_scan_to_cache "$SCAN_SECONDS"
+  while true; do
+    local addrs=() labels=() addr rssi name lbl
+    while IFS=$'\t' read -r addr rssi name; do
+      [[ -z $addr ]] && continue
+      addrs+=("$addr")
+      printf -v lbl '%-28.28s %6s dBm  %.8s…' "$name" "$rssi" "$addr"
+      labels+=("$lbl")
+    done < <(parse_scan_cache)
+
+    local opts=("↻ Rescan now")
+    [[ ${#addrs[@]} -gt 0 ]] && opts+=("${labels[@]}")
+    opts+=("⌨  Type a name/address manually")
+
+    menu "Target device — pick from last scan" "${opts[@]}" >/dev/tty
+    local idx=$REPLY_INDEX ndev=${#addrs[@]}
+
+    if (( idx < 0 )); then
+      return                                   # q/back → cancel
+    elif (( idx == 0 )); then
+      run_scan_to_cache "$SCAN_SECONDS"; continue
+    elif (( idx == ndev + 1 )); then
+      ask "Target device (name substring or address)"; return   # manual
+    else
+      printf '%s\n' "${addrs[idx-1]}"; return   # picked a scanned device
+    fi
+  done
+}
+
+need_device(){ pick_device; }
+
 # --- toolkit actions -------------------------------------------------------
-t_scan(){ banner; local s; s="$(ask 'Scan seconds' '8')"; run "$PY" "$TOOLKIT/scan_ble.py" -t "$s"; }
+t_scan(){ banner; local s; s="$(ask 'Scan seconds' '8')"; run "$PY" "$TOOLKIT/scan_ble.py" -t "$s" --write-to "$SCAN_CACHE"; }
 t_watch(){ banner; local to; to="$(ask 'Timeout seconds (blank=until Ctrl-C)' '20')"; run "$PY" "$TOOLKIT/watch_ble.py" --timeout "$to"; }
 t_enum(){ local d; d="$(need_device)"; [[ -z $d ]] && return; run "$PY" "$TOOLKIT/enum_ble.py" "$d" --readable; }
 t_cli(){ local d; d="$(need_device)"; [[ -z $d ]] && return; run "$PY" "$TOOLKIT/gatt_cli.py" "$d"; }
@@ -290,20 +390,28 @@ check_deps(){
 }
 
 # --- main ------------------------------------------------------------------
-check_deps
-while true; do
-  menu "Main menu" \
-    "BLE Toolkit        — scan, enumerate, read/write" \
-    "BLE-Exploits       — authorized vulnerability PoCs" \
-    "BLE CTF client     — gatttool-style handle I/O" \
-    "View captures      — JSON evidence" \
-    "Quit"
-  case $REPLY_INDEX in
-    0) toolkit_menu;;
-    1) exploit_menu;;
-    2) ctf_menu;;
-    3) view_captures;;
-    4|-1) break;;
-  esac
-done
-clear_screen
+main(){
+  check_deps
+  while true; do
+    menu "Main menu" \
+      "BLE Toolkit        — scan, enumerate, read/write" \
+      "BLE-Exploits       — authorized vulnerability PoCs" \
+      "BLE CTF client     — gatttool-style handle I/O" \
+      "View captures      — JSON evidence" \
+      "Quit"
+    case $REPLY_INDEX in
+      0) toolkit_menu;;
+      1) exploit_menu;;
+      2) ctf_menu;;
+      3) view_captures;;
+      4|-1) break;;
+    esac
+  done
+  clear_screen
+}
+
+# Run the UI only when executed directly; sourcing exposes the functions alone
+# (so the picker and menu engine can be driven from a test harness).
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  main
+fi
