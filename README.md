@@ -60,6 +60,7 @@ place of `python3` in the examples below.
 
 ```bash
 ./ble_tui.sh                         # menu TUI driving every tool (macOS/Linux shells)
+.\ble_tui.ps1                        # same menu TUI, native PowerShell (Windows)
 python3 scan_ble.py                  # what is advertising near me?
 python3 enum_ble.py "Device Name"    # what GATT attributes does it expose?
 python3 gatt_cli.py "Device Name"    # poke at it interactively
@@ -140,10 +141,12 @@ python3 gatt_battery.py "Acme Tracker"
 Beyond the individual scripts, WAMBLE ships three extras, all built on the same
 `bleak` core (so the same cross-platform expectations apply):
 
-- **[`ble_tui.sh`](ble_tui.sh)** — a keyboard-driven menu that launches every
-  tool below, prompts for the device/arguments, and includes a captures viewer.
-  It's a Bash script (macOS/Linux shells, or WSL/Git Bash on Windows); or just
-  call the Python tools directly.
+- **[`ble_tui.sh`](ble_tui.sh)** / **[`ble_tui.ps1`](ble_tui.ps1)** — a
+  keyboard-driven menu that launches every tool below, prompts for the
+  device/arguments, and includes a captures viewer. Use the **`.sh`** on
+  macOS/Linux shells (or WSL/Git Bash), the **`.ps1`** natively in PowerShell on
+  Windows; or just call the Python tools directly. Both are thin launchers with
+  identical menus.
 - **[`BLE-Exploits/`](BLE-Exploits/)** — a suite of **authorized, non-destructive**
   BLE vulnerability demonstrations (unauthenticated GATT harvest, posture
   assessment, LED control PoC, notification capture, capture-replay, persistence,
