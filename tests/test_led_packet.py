@@ -16,7 +16,7 @@ _EXPLOITS = Path(__file__).resolve().parent.parent / "BLE-Exploits"
 if str(_EXPLOITS) not in sys.path:
     sys.path.insert(0, str(_EXPLOITS))
 
-from ble_led_unauth_control import (  # noqa: E402
+from ble_led_unauth_control import (
     PACKET_LEN,
     brightness_packet,
     color_packet,
@@ -57,7 +57,9 @@ class TestGoveePacket:
         assert power_packet(True) == bytes([0x33, 0x01, 0x01]) + bytes(16) + bytes([0x33])
 
     def test_known_good_red_packet(self):
-        assert color_packet(255, 0, 0) == bytes([0x33, 0x05, 0x02, 0xFF, 0x00, 0x00]) + bytes(13) + bytes([0xCB])
+        assert color_packet(255, 0, 0) == bytes([0x33, 0x05, 0x02, 0xFF, 0x00, 0x00]) + bytes(
+            13
+        ) + bytes([0xCB])
 
     def test_color_channels_are_clamped_to_byte_range(self):
         pkt = color_packet(-5, 999, 128)

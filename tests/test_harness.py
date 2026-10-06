@@ -16,7 +16,6 @@ from bleak.backends.service import (
     BleakGATTService,
     BleakGATTServiceCollection,
 )
-
 from conftest import (
     FakeCharacteristic,
     FakeClient,
@@ -87,9 +86,7 @@ def _real_objects():
         service,
     )
     service.add_characteristic(characteristic)
-    descriptor = BleakGATTDescriptor(
-        None, 0x0010, normalize_uuid_str("2902"), characteristic
-    )
+    descriptor = BleakGATTDescriptor(None, 0x0010, normalize_uuid_str("2902"), characteristic)
     characteristic.add_descriptor(descriptor)
     return service, characteristic, descriptor
 
@@ -212,9 +209,7 @@ class TestGetCharacteristic:
     def test_fake_and_real_resolve_identically(self, gatt_env, specifier):
         fake_collection = gatt_env.client.services
         real_collection = _real_collection(fake_collection)
-        assert _resolution(fake_collection, specifier) == _resolution(
-            real_collection, specifier
-        )
+        assert _resolution(fake_collection, specifier) == _resolution(real_collection, specifier)
 
 
 def test_fake_collection_resolves_descriptors_by_handle_like_real_bleak(gatt_env):
@@ -261,9 +256,7 @@ def test_fake_collection_normalizes_short_uuid_arguments():
 async def test_fake_client_records_read_gatt_char_and_returns_the_response(gatt_env):
     gatt_env.client.responses[("char", 0x0020)] = b"\x64"
     assert await gatt_env.client.read_gatt_char(gatt_env.battery_char) == b"\x64"
-    assert gatt_env.client.calls == [
-        ("read_gatt_char", gatt_env.battery_char, None, None)
-    ]
+    assert gatt_env.client.calls == [("read_gatt_char", gatt_env.battery_char, None, None)]
 
 
 async def test_fake_client_records_write_gatt_char_with_the_response_flag(gatt_env):

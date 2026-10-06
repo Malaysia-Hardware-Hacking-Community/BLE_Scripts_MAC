@@ -38,7 +38,7 @@ from bleak import BleakClient, normalize_uuid_str
 from rich.console import Console
 from rich.table import Table
 
-from ble_common import connect, short_uuid
+from ble_common import add_connection_args, connect, short_uuid
 
 console = Console()
 
@@ -195,12 +195,7 @@ async def main() -> None:
         default=400,
         help=f"Supervision timeout, 10 ms units, {TIMEOUT_MIN_ALLOWED}-{TIMEOUT_MAX_ALLOWED} (default: 400 = 4 s)",
     )
-    parser.add_argument(
-        "--scan-timeout", type=float, default=15, help="Scan timeout in seconds (default: 15)"
-    )
-    parser.add_argument(
-        "--connect-timeout", type=float, default=30, help="Connection timeout in seconds (default: 30)"
-    )
+    add_connection_args(parser)
 
     args = parser.parse_args()
 
@@ -265,9 +260,7 @@ async def main() -> None:
         try:
             await client.write_gatt_char(char, payload, response=True)
         except Exception as exc:
-            console.print(
-                f"[red]Write to characteristic {char.handle} failed: {exc!r}[/red]"
-            )
+            console.print(f"[red]Write to characteristic {char.handle} failed: {exc!r}[/red]")
             console.print(
                 "[dim]PPCP is read-only on most peripherals; this is expected. A "
                 "central cannot set connection parameters via GATT.[/dim]"

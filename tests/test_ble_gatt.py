@@ -187,19 +187,19 @@ class TestBleCommonDelegates:
     def test_find_descriptor_resolves_by_handle(self, gatt_env):
         from ble_common import find_descriptor
 
-        found = find_descriptor(gatt_env.client, gatt_env.battery_char, "16")
+        found = find_descriptor(gatt_env.battery_char, "16")
         assert found is gatt_env.config_desc
 
     def test_find_descriptor_resolves_by_hex_handle(self, gatt_env):
         from ble_common import find_descriptor
 
-        found = find_descriptor(gatt_env.client, gatt_env.battery_char, "0x10")
+        found = find_descriptor(gatt_env.battery_char, "0x10")
         assert found is gatt_env.config_desc
 
     def test_find_descriptor_defaults_to_first(self, gatt_env):
         from ble_common import find_descriptor
 
-        assert find_descriptor(gatt_env.client, gatt_env.battery_char) is gatt_env.config_desc
+        assert find_descriptor(gatt_env.battery_char) is gatt_env.config_desc
 
     def test_find_characteristic_by_property_still_returns_a_list(self, gatt_env):
         from ble_common import find_characteristic
@@ -254,9 +254,7 @@ class TestWriteLong:
     async def test_chunks_on_the_max_write_size(self, gatt_env):
         gatt_env.battery_char.max_write_without_response_size = 4
         payload = b"0123456789"
-        written = await write_long(
-            gatt_env.client, gatt_env.battery_char, payload, response=False
-        )
+        written = await write_long(gatt_env.client, gatt_env.battery_char, payload, response=False)
         assert written == 10
         writes = [c for c in gatt_env.client.calls if c[0] == "write_gatt_char"]
         assert [c[2] for c in writes] == [b"0123", b"4567", b"89"]
@@ -302,11 +300,17 @@ class TestReadAndWriteTarget:
     async def test_write_target_writes_a_characteristic(self, gatt_env):
         await write_target(gatt_env.client, gatt_env.writable_char, b"\x01", response=False)
         assert gatt_env.client.calls[-1] == (
-            "write_gatt_char", gatt_env.writable_char, b"\x01", False
+            "write_gatt_char",
+            gatt_env.writable_char,
+            b"\x01",
+            False,
         )
 
     async def test_write_target_writes_a_descriptor_without_a_response_flag(self, gatt_env):
         await write_target(gatt_env.client, gatt_env.config_desc, b"\x01\x00")
         assert gatt_env.client.calls[-1] == (
-            "write_gatt_descriptor", gatt_env.config_desc, b"\x01\x00", None
+            "write_gatt_descriptor",
+            gatt_env.config_desc,
+            b"\x01\x00",
+            None,
         )

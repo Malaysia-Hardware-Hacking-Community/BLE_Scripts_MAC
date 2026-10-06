@@ -7,6 +7,7 @@ from rich.console import Console
 
 from ble_common import (
     GATTTableBuilder,
+    add_connection_args,
     connect,
     decode_bytes,
     fmt_bytes,
@@ -39,13 +40,16 @@ CTF_INTERESTING_UUIDS = {
 }
 
 
-async def main():
+# The CLI entry point: it parses arguments and runs several optional passes
+# (readable, writable, notify, CTF mode). It is the most complex function in the
+# toolkit and is a good candidate to split into helpers later; the complexity cap
+# is relaxed here for now.
+async def main():  # noqa: C901
     parser = argparse.ArgumentParser(
         description="Connect and enumerate GATT attributes (CTF-aware)."
     )
     parser.add_argument("device", help="Identifier from scan_ble.py (address or name)")
-    parser.add_argument("--scan-timeout", type=float, default=15, help="Scan timeout in seconds")
-    parser.add_argument("--connect-timeout", type=float, default=30, help="Connection timeout in seconds")
+    add_connection_args(parser)
     parser.add_argument(
         "--readable",
         action="store_true",
@@ -107,14 +111,12 @@ async def main():
         # Also filter by UUID if requested
         filter_uuid = args.filter_uuid.lower() if args.filter_uuid else None
 
-        all_chars = []  # type: list
+        all_chars: list = []
         for _svc, chars in builder.services:
             for ch in chars.values():
                 # Apply UUID filter
-                if filter_uuid:
-                    if filter_uuid not in str(ch.uuid).lower():
-                        continue
-
+                if filter_uuid and filter_uuid not in str(ch.uuid).lower():
+                    continue
                 all_chars.append(ch)
 
         # Populate value rows for readable characteristics
@@ -130,10 +132,12 @@ async def main():
                         value = await client.read_gatt_char(ch)
                         text = decode_bytes(value)
                         if text or args.ctf_mode:
-                            interesting = (
-                                short_uuid(ch.uuid) in CTF_INTERESTING_UUIDS
+                            interesting = short_uuid(ch.uuid) in CTF_INTERESTING_UUIDS
+                            mark = (
+                                " [bold magenta]<-- interesting[/bold magenta]"
+                                if interesting
+                                else ""
                             )
-                            mark = " [bold magenta]<-- interesting[/bold magenta]" if interesting else ""
                             console.print(
                                 f"\n[cyan]Read {ch.uuid} (handle {ch.handle}){mark}[/cyan]"
                             )
@@ -141,13 +145,9 @@ async def main():
                     except BleakGATTProtocolError as exc:
                         code = getattr(exc, "code", None)
                         code_str = f"0x{code:02X}" if isinstance(code, int) else "n/a"
-                        console.print(
-                            f"[red]GATT read failed (code {code_str}): {exc}[/red]"
-                        )
+                        console.print(f"[red]GATT read failed (code {code_str}): {exc}[/red]")
                     except Exception as exc:
-                        console.print(
-                            f"[red]Read failed ({type(exc).__name__}): {exc!r}[/red]"
-                        )
+                        console.print(f"[red]Read failed ({type(exc).__name__}): {exc!r}[/red]")
 
         # Write support
         if args.writable:
@@ -167,8 +167,7 @@ async def main():
                     console.print(f"[green]{short_uuid(sender.uuid)}: {text}[/green]")
                 else:
                     console.print(
-                        f"[green]{short_uuid(sender.uuid)} notified "
-                        f"({len(data)} bytes)[/green]"
+                        f"[green]{short_uuid(sender.uuid)} notified ({len(data)} bytes)[/green]"
                     )
 
             for _svc, chars in builder.services:
@@ -181,20 +180,15 @@ async def main():
                     # bleak has no separate indicate call: start_notify writes the
                     # CCCD, and the peripheral picks notify vs indicate from the
                     # value written.
-                    kind = (
-                        "notify" if "notify" in ch.properties else "indicate"
-                    )
+                    kind = "notify" if "notify" in ch.properties else "indicate"
                     try:
                         await client.start_notify(ch, _notification_handler)
                         count += 1
                         console.print(
-                            f"  [green]subscribed[/green] {ch.uuid} "
-                            f"(handle {ch.handle}, {kind})"
+                            f"  [green]subscribed[/green] {ch.uuid} (handle {ch.handle}, {kind})"
                         )
                     except Exception as exc:
-                        console.print(
-                            f"  [red]failed {kind} on {ch.uuid}: {exc!r}[/red]"
-                        )
+                        console.print(f"  [red]failed {kind} on {ch.uuid}: {exc!r}[/red]")
 
             console.print(f"\n[dim]{count} subscription(s) active.[/dim]")
 
@@ -231,9 +225,7 @@ async def main():
                 for uuid, text in found_flags[:10]:
                     console.print(f"  - {uuid}: {text}")
             else:
-                console.print(
-                    "[dim]No CTF-relevant standard UUIDs with read property found.[/dim]"
-                )
+                console.print("[dim]No CTF-relevant standard UUIDs with read property found.[/dim]")
 
         # -------------------------------------------------------------------------
         # Generic characteristic enumeration (always on)
@@ -246,9 +238,7 @@ async def main():
                     continue
 
                 props_str = format_properties(ch.properties)
-                console.print(
-                    f"  [cyan]UUID {ch.uuid}[/cyan] handle={ch.handle} props={props_str}"
-                )
+                console.print(f"  [cyan]UUID {ch.uuid}[/cyan] handle={ch.handle} props={props_str}")
 
                 # Describe descriptors if any. Descriptors need read_gatt_descriptor,
                 # not read_gatt_char.
@@ -257,8 +247,7 @@ async def main():
                     console.print(f"    [dim]Descriptors ({len(descrs)}):[/dim]")
                     for d in descrs[:5]:  # show first 5
                         console.print(
-                            f"      [dim]  {short_uuid(d.uuid)} "
-                            f"(handle {d.handle})[/dim]"
+                            f"      [dim]  {short_uuid(d.uuid)} (handle {d.handle})[/dim]"
                         )
                     if len(descrs) > 5:
                         console.print(f"      [dim]... and {len(descrs) - 5} more[/dim]")
@@ -266,17 +255,13 @@ async def main():
         # -------------------------------------------------------------------------
         # Summary
         # -------------------------------------------------------------------------
-        console.print(
-            f"\n[dim]Total characteristics enumerated: {len(all_chars)}[/dim]"
-        )
+        console.print(f"\n[dim]Total characteristics enumerated: {len(all_chars)}[/dim]")
 
         # If the user asked to subscribe, block here so notifications actually
         # arrive. Without this the function would return and the finally below
         # would disconnect before the peripheral ever pushed an update.
         if (args.notify or args.indicate) and count:
-            console.print(
-                "\n[dim]Streaming updates. Press Ctrl-C to disconnect.[/dim]"
-            )
+            console.print("\n[dim]Streaming updates. Press Ctrl-C to disconnect.[/dim]")
             # Block until interrupted. On Ctrl-C the task is cancelled; the
             # cancellation propagates (not swallowed) so the finally below runs
             # to disconnect and __main__ reports it, matching watch_ble.

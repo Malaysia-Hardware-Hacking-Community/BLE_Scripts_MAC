@@ -45,9 +45,7 @@ def build_table(latest: dict) -> Table:
 
 
 async def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Continuously monitor BLE advertisements."
-    )
+    parser = argparse.ArgumentParser(description="Continuously monitor BLE advertisements.")
     parser.add_argument(
         "--name",
         help="Only display names containing this text.",

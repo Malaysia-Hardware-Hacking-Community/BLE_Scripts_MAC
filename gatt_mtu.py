@@ -23,7 +23,7 @@ from bleak import BleakClient
 from rich.console import Console
 from rich.table import Table
 
-from ble_common import connect
+from ble_common import add_connection_args, connect
 
 console = Console()
 
@@ -49,18 +49,7 @@ async def main() -> None:
         ),
     )
     parser.add_argument("device", help="Device address or name")
-    parser.add_argument(
-        "--scan-timeout",
-        type=float,
-        default=15,
-        help="Scan timeout in seconds (default: 15)",
-    )
-    parser.add_argument(
-        "--connect-timeout",
-        type=float,
-        default=30,
-        help="Connection timeout in seconds (default: 30)",
-    )
+    add_connection_args(parser)
 
     args = parser.parse_args()
 
@@ -91,8 +80,7 @@ async def main() -> None:
             )
         elif sys.platform.startswith("win"):
             console.print(
-                "[dim]WinRT negotiates this automatically; "
-                "it cannot be set from Python.[/dim]"
+                "[dim]WinRT negotiates this automatically; it cannot be set from Python.[/dim]"
             )
         elif sys.platform.startswith("linux"):
             console.print(

@@ -3,6 +3,7 @@
 Provides `find` functionality matching bluez gatttool's `find <uuid>` command,
 searching for characteristics or descriptors matching a UUID substring.
 """
+
 import argparse
 import asyncio
 
@@ -11,6 +12,7 @@ from rich.console import Console
 from rich.table import Table
 
 from ble_common import (
+    add_connection_args,
     connect,
     enumerate_services,
     format_properties,
@@ -30,18 +32,21 @@ async def find_by_uuid(client: BleakClient, uuid_substring: str, target: str = "
     uuid_lower = uuid_substring.lower()
     services = enumerate_services(client)
 
-    found = []
     if target == "char":
-        for _svc, chars in services:
-            for ch in chars.values():
-                if uuid_lower in str(ch.uuid).lower():
-                    found.append(ch)
+        found = [
+            ch
+            for _svc, chars in services
+            for ch in chars.values()
+            if uuid_lower in str(ch.uuid).lower()
+        ]
     else:  # descr: search descriptors only, never characteristics
-        for _svc, chars in services:
-            for ch in chars.values():
-                for d in ch.descriptors:
-                    if uuid_lower in str(d.uuid).lower():
-                        found.append(d)
+        found = [
+            d
+            for _svc, chars in services
+            for ch in chars.values()
+            for d in ch.descriptors
+            if uuid_lower in str(d.uuid).lower()
+        ]
 
     if not found:
         console.print(f"[yellow]No {target}s found matching '{uuid_substring}'.[/yellow]")
@@ -70,21 +75,14 @@ async def main() -> None:
         description="Gatttool-compatible find characteristic/descriptor by UUID."
     )
     parser.add_argument("device", help="Device address or name")
+    parser.add_argument("uuid", help="UUID substring to search for (16-bit, 32-bit, or 128-bit)")
     parser.add_argument(
-        "uuid", help="UUID substring to search for (16-bit, 32-bit, or 128-bit)"
+        "--target",
+        choices=["char", "descr"],
+        default="char",
+        help="Search target: characteristics (default) or descriptors",
     )
-    parser.add_argument(
-        "--target", choices=["char", "descr"], default="char",
-        help="Search target: characteristics (default) or descriptors"
-    )
-    parser.add_argument(
-        "--scan-timeout", type=float, default=15,
-        help="Scan timeout in seconds"
-    )
-    parser.add_argument(
-        "--connect-timeout", type=float, default=30,
-        help="Connection timeout in seconds"
-    )
+    add_connection_args(parser)
 
     args = parser.parse_args()
 

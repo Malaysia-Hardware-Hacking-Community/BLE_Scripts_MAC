@@ -9,6 +9,13 @@ tagging releases.
 
 ### Added
 
+- GitHub Actions CI that runs the test suite on Linux, macOS, and Windows across
+  Python 3.11 to 3.13, plus a strict quality job: ruff (redundancy,
+  simplifications, slow patterns, import order, complexity), ruff format, vulture
+  (dead code), and pylint duplicate-code (copy-paste detection).
+- `pyproject.toml` holding the lint and duplicate-code configuration.
+- `add_connection_args()` in `ble_common`, so every connecting tool shares one
+  definition of `--scan-timeout` and `--connect-timeout`.
 - Project community files: `LICENSE` (MIT), `CONTRIBUTING.md`,
   `CODE_OF_CONDUCT.md`, `SECURITY.md`, `GOVERNANCE.md`, `SUPPORT.md`, a changelog,
   and GitHub issue and pull request templates.

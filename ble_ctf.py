@@ -36,7 +36,7 @@ Default target name is the CTF device ("M0DUL0CTF"); override with -b/--device
 import argparse
 import asyncio
 
-from ble_common import connect, console, decode_bytes, fmt_bytes
+from ble_common import add_connection_args, connect, console, decode_bytes, fmt_bytes
 from ble_gatt import as_handle, read_target, resolve_target
 
 DEFAULT_DEVICE = "M0DUL0CTF"
@@ -87,6 +87,7 @@ def _show(value: bytes, label: str = "") -> None:
 
 # --- operations (each takes a connected client, so they are unit-testable) ---
 
+
 async def op_read(client, handle: str) -> bytes:
     target = _resolve(client, handle)
     if target is None:
@@ -120,19 +121,23 @@ async def op_readloop(client, handle: str, count: int, show_every: int = 0) -> b
     return last
 
 
-async def op_listen(client, handle: str, trigger: bytes | None, secs: float, *, response: bool) -> list:
+async def op_listen(
+    client, handle: str, trigger: bytes | None, secs: float, *, response: bool
+) -> list:
     target = _resolve(client, handle)
     if target is None:
         return []
     events: list = []
 
-    def handler(sender, data):
+    def handler(_sender, data):
         entry = {"hex": fmt_bytes(data), "text": decode_bytes(data)}
         events.append(entry)
         console.print(f"  [cyan]notify/indicate[/cyan]: {entry['text'] or entry['hex']}")
 
     await client.start_notify(target, handler)
-    console.print(f"[green]subscribed[/green] to {handle}; listening {secs:g}s. Ctrl-C to stop early.")
+    console.print(
+        f"[green]subscribed[/green] to {handle}; listening {secs:g}s. Ctrl-C to stop early."
+    )
     try:
         if trigger is not None:
             await client.write_gatt_char(target, trigger, response=response)
@@ -143,7 +148,7 @@ async def op_listen(client, handle: str, trigger: bytes | None, secs: float, *, 
     finally:
         try:
             await client.stop_notify(target)
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
     console.print(f"[dim]captured {len(events)} message(s).[/dim]")
     return events
@@ -167,9 +172,13 @@ def op_mtu_report(mtu: int) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="gatttool-style scriptable BLE CTF client for macOS.")
-    p.add_argument("-b", "--device", default=DEFAULT_DEVICE, help=f"Device name/address (default: {DEFAULT_DEVICE})")
-    p.add_argument("--scan-timeout", type=float, default=15)
-    p.add_argument("--connect-timeout", type=float, default=30)
+    p.add_argument(
+        "-b",
+        "--device",
+        default=DEFAULT_DEVICE,
+        help=f"Device name/address (default: {DEFAULT_DEVICE})",
+    )
+    add_connection_args(p)
     sub = p.add_subparsers(dest="op", required=True)
 
     sub.add_parser("enum", help="Enumerate services/characteristics with handles")
@@ -193,7 +202,9 @@ def build_parser() -> argparse.ArgumentParser:
     sm.add_argument("-s", "--string", required=True)
     sm.add_argument("-a", "--handle", default=SUBMIT_HANDLE)
 
-    lp = sub.add_parser("listen", help="Subscribe, optionally trigger-write, capture notify/indicate")
+    lp = sub.add_parser(
+        "listen", help="Subscribe, optionally trigger-write, capture notify/indicate"
+    )
     lp.add_argument("-a", "--handle", required=True)
     lp.add_argument("-n", "--value", help="Optional hex to write as a trigger")
     lp.add_argument("--secs", type=float, default=8.0)
@@ -217,6 +228,7 @@ async def main() -> None:
     try:
         if args.op == "enum":
             from ble_common import print_gatt_tables
+
             print_gatt_tables(client)
         elif args.op == "mtu":
             op_mtu_report(int(client.mtu_size))

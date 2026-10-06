@@ -1,8 +1,8 @@
 import argparse
 import asyncio
 import json
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Tuple
+from datetime import UTC, datetime
+from typing import Any
 
 from bleak import BleakScanner
 from rich.console import Console
@@ -29,8 +29,7 @@ def service_uuid_matches(service_filter: str, adv_service_uuids) -> bool:
     (``1000``, ``8000``, ``34fb`` …) match every SIG device.
     """
     needle = service_filter.strip().casefold()
-    if needle.startswith("0x"):
-        needle = needle[2:]
+    needle = needle.removeprefix("0x")
     if not needle:
         return False
     needle_canon = short_uuid(needle).casefold()
@@ -43,8 +42,8 @@ def service_uuid_matches(service_filter: str, adv_service_uuids) -> bool:
 
 
 def make_table(
-    found: Dict[str, Tuple[Any, Any]],
-) -> Tuple[Table, List[Tuple[str, Any, Any]]]:
+    found: dict[str, tuple[Any, Any]],
+) -> tuple[Table, list[tuple[str, Any, Any]]]:
     """Build a rich table from discovered BLE advertisements.
 
     Returns:(table, rows) where rows are (address, device, advertisement) tuples
@@ -59,17 +58,19 @@ def make_table(
     # or a 17-char MAC on Win/Linux) so it is shown complete on one line and can
     # be copied verbatim. no_wrap without a min_width lets rich crop it in a
     # narrow terminal, which yields an unusable, truncated identifier.
-    table.add_column(
-        "Address / Identifier", style="dim", no_wrap=True, min_width=36
-    )
+    table.add_column("Address / Identifier", style="dim", no_wrap=True, min_width=36)
     table.add_column("RSSI", justify="right")
     table.add_column("Advertised services", overflow="fold")
     table.add_column("Manufacturer data", overflow="fold")
     table.add_column("Service data", overflow="fold")
 
-    rows: List[Tuple[str, Any, Any]] = []
+    rows: list[tuple[str, Any, Any]] = []
     for index, (address, (device, adv)) in enumerate(
-        sorted(found.items(), key=lambda item: item[1][1].rssi if item[1][1].rssi is not None else -999, reverse=True),
+        sorted(
+            found.items(),
+            key=lambda item: item[1][1].rssi if item[1][1].rssi is not None else -999,
+            reverse=True,
+        ),
         start=1,
     ):
         # Parse advertisement data
@@ -86,9 +87,7 @@ def make_table(
 
         # Show at most the first three service-data entries.
         # parse_advertisement_data already returns hex strings, so don't re-format.
-        sd_parts = [
-            f"0x{u[:8]}={data[:16]}" for u, data in list(service_data.items())[:3]
-        ]
+        sd_parts = [f"0x{u[:8]}={data[:16]}" for u, data in list(service_data.items())[:3]]
         service_data_str = "; ".join(sd_parts) or "—"
 
         rows.append((address, device, adv))
@@ -108,10 +107,24 @@ def make_table(
 
 async def main():
     parser = argparse.ArgumentParser(description="Scan nearby BLE advertisements.")
-    parser.add_argument("-t", "--timeout", type=float, default=8, help="Scan timeout in seconds (default: 8)")
-    parser.add_argument("-n", "--name", help="Only display advertisements from devices with this name substring")
-    parser.add_argument("-s", "--service", help="Only display advertisements containing this service UUID (16-bit hex, e.g. '180f')")
-    parser.add_argument("-m", "--min-rssi", type=int, default=None, help="Minimum RSSI filter (exclude weaker signals)")
+    parser.add_argument(
+        "-t", "--timeout", type=float, default=8, help="Scan timeout in seconds (default: 8)"
+    )
+    parser.add_argument(
+        "-n", "--name", help="Only display advertisements from devices with this name substring"
+    )
+    parser.add_argument(
+        "-s",
+        "--service",
+        help="Only display advertisements containing this service UUID (16-bit hex, e.g. '180f')",
+    )
+    parser.add_argument(
+        "-m",
+        "--min-rssi",
+        type=int,
+        default=None,
+        help="Minimum RSSI filter (exclude weaker signals)",
+    )
     parser.add_argument(
         "--plain",
         action="store_true",
@@ -128,7 +141,7 @@ async def main():
     if args.timeout <= 0:
         parser.error("--timeout must be positive")
 
-    found: Dict[str, Tuple[Any, Any]] = {}
+    found: dict[str, tuple[Any, Any]] = {}
 
     def detection_callback(device, adv):
         # Filter by name substring if provided
@@ -180,7 +193,7 @@ async def main():
     if args.write_to and found:
         output = {
             # datetime.utcnow() is deprecated since 3.12; use an explicit UTC tz.
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "timeout": args.timeout,
             "device_count": len(found),
             "devices": [],

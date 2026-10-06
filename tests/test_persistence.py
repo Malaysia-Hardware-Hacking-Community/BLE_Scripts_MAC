@@ -12,7 +12,7 @@ _EXPLOITS = Path(__file__).resolve().parent.parent / "BLE-Exploits"
 if str(_EXPLOITS) not in sys.path:
     sys.path.insert(0, str(_EXPLOITS))
 
-from ble_persistence_test import (  # noqa: E402
+from ble_persistence_test import (
     load_state,
     persistence_verdict,
     save_state,

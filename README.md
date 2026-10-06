@@ -1,5 +1,7 @@
 # WAMBLE: Windows And Mac BLE
 
+[![CI](https://github.com/Malaysia-Hardware-Hacking-Community/WAMBLE/actions/workflows/ci.yml/badge.svg)](https://github.com/Malaysia-Hardware-Hacking-Community/WAMBLE/actions/workflows/ci.yml)
+
 Bluetooth Low Energy tooling for **macOS and Windows**, in the shape of the
 Linux `gatttool` and BlueZ command-line utilities.
 

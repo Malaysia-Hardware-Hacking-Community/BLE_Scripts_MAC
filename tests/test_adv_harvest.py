@@ -11,7 +11,7 @@ _EXPLOITS = Path(__file__).resolve().parent.parent / "BLE-Exploits"
 if str(_EXPLOITS) not in sys.path:
     sys.path.insert(0, str(_EXPLOITS))
 
-from ble_adv_harvest import decode_mibeacon  # noqa: E402
+from ble_adv_harvest import decode_mibeacon
 
 # The exact fe95 service-data captured live from "Xiaomi Scale S400 CEC9".
 REAL_FRAME = bytes.fromhex("1059d53b00c9ce63acea1c")

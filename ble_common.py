@@ -1,5 +1,7 @@
 import asyncio
-from typing import Any, Optional, Callable
+from collections.abc import Callable
+from typing import Any
+
 from bleak import BleakClient, BleakScanner, normalize_uuid_str
 from bleak.backends.device import BLEDevice
 from rich.console import Console
@@ -73,7 +75,7 @@ def format_properties(props, empty: str = "—") -> str:
     return ", ".join(ordered) if ordered else empty
 
 
-def uuid16_from_128(uuid_128: str) -> Optional[str]:
+def uuid16_from_128(uuid_128: str) -> str | None:
     """Reduce a 128-bit UUID to its 16-bit form, if it is a Bluetooth SIG base UUID.
 
     Accepts 16-bit, 32-bit or 128-bit input. Returns the lowercase 16-bit hex
@@ -107,8 +109,8 @@ async def find_device(
     identifier: str,
     timeout: float = 15.0,
     *,
-    callback: Optional[Callable[[BLEDevice, Any], None]] = None,
-) -> Optional[BLEDevice]:
+    callback: Callable[[BLEDevice, Any], None] | None = None,
+) -> BLEDevice | None:
     """Scan for a BLE device by address or name, returning as soon as it matches.
 
     *identifier* is matched case-insensitively against the device address and
@@ -154,7 +156,7 @@ async def connect(
     connect_timeout: float = 30.0,
     *,
     background: bool = False,
-) -> Optional[BleakClient]:
+) -> BleakClient | None:
     """Connect to a BLE device identified by address or name.
 
     Returns a BleakClient on success, or None on failure.
@@ -181,6 +183,26 @@ async def connect(
         return None
 
 
+def add_connection_args(parser, *, scan_default: float = 15, connect_default: float = 30) -> None:
+    """Add the standard ``--scan-timeout`` and ``--connect-timeout`` options.
+
+    Every connecting tool takes the same two options, so defining them in one
+    place keeps their names, defaults, and help text identical across the toolkit.
+    """
+    parser.add_argument(
+        "--scan-timeout",
+        type=float,
+        default=scan_default,
+        help=f"Seconds to scan for the device (default: {scan_default:g})",
+    )
+    parser.add_argument(
+        "--connect-timeout",
+        type=float,
+        default=connect_default,
+        help=f"Seconds to wait for the connection (default: {connect_default:g})",
+    )
+
+
 def enumerate_services(client: BleakClient) -> list:
     """Return a flat list of (service, characteristics_dict) tuples.
 
@@ -200,7 +222,7 @@ def find_characteristic(
     specifier: str,
     *,
     by: str = "uuid",
-) -> Optional[Any]:
+) -> Any | None:
     """Find a characteristic by handle, UUID substring, or property name.
 
     *specifier*: matched case-insensitively against characteristic UUIDs, or
@@ -219,11 +241,12 @@ def find_characteristic(
 
     if by == "property":
         prop = str(specifier).lower()  # "read", "write", "notify", "indicate", etc.
-        matching = []
-        for _svc, chars in enumerate_services(client):
-            for ch in chars.values():
-                if prop in set(ch.properties):
-                    matching.append(ch)
+        matching = [
+            ch
+            for _svc, chars in enumerate_services(client)
+            for ch in chars.values()
+            if prop in ch.properties
+        ]
         return matching or None
 
     found = resolve_target(client, specifier)
@@ -233,10 +256,9 @@ def find_characteristic(
 
 
 def find_descriptor(
-    client: BleakClient,
     char: Any,
     specifier: str = "",
-) -> Optional[Any]:
+) -> Any | None:
     """Find a descriptor on a characteristic by UUID substring or handle.
 
     With no *specifier*, returns the characteristic's first descriptor.
@@ -354,9 +376,7 @@ def print_descriptors_table(client: BleakClient) -> None:
     for _svc, chars in enumerate_services(client):
         for ch in chars.values():
             for desc in ch.descriptors:
-                desc_table.add_row(
-                    short_uuid(ch.uuid), short_uuid(desc.uuid), str(desc.handle)
-                )
+                desc_table.add_row(short_uuid(ch.uuid), short_uuid(desc.uuid), str(desc.handle))
                 rows += 1
 
     if rows:
@@ -382,8 +402,7 @@ async def read_gatt_char(client: BleakClient, uuid_or_handle: str | int) -> Any:
     ch = find_characteristic(client, str(uuid_or_handle), by="uuid")
     if ch is None:
         raise RuntimeError(f"Characteristic {uuid_or_handle!r} not found")
-    val = await client.read_gatt_char(ch)
-    return val
+    return await client.read_gatt_char(ch)
 
 
 async def write_gatt_char(
@@ -433,25 +452,26 @@ def parse_advertisement_data(adv: Any) -> dict:
 
 
 __all__ = [
-    "fmt_bytes",
-    "decode_bytes",
-    "show_value",
-    "find_device",
+    "BASE_UUID_SUFFIX",
+    "DISPLAYED_PROPERTIES",
+    "GATTTableBuilder",
+    "add_connection_args",
     "connect",
+    "decode_bytes",
     "enumerate_services",
     "find_characteristic",
     "find_descriptor",
-    "GATTTableBuilder",
-    "print_gatt_tables",
-    "print_services_table",
+    "find_device",
+    "fmt_bytes",
+    "format_properties",
+    "parse_advertisement_data",
     "print_characteristics_table",
     "print_descriptors_table",
+    "print_gatt_tables",
+    "print_services_table",
     "read_gatt_char",
-    "write_gatt_char",
-    "parse_advertisement_data",
-    "uuid16_from_128",
     "short_uuid",
-    "format_properties",
-    "DISPLAYED_PROPERTIES",
-    "BASE_UUID_SUFFIX",
+    "show_value",
+    "uuid16_from_128",
+    "write_gatt_char",
 ]

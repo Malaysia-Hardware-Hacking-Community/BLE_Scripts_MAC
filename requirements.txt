@@ -3,11 +3,18 @@
 #
 # On macOS, bleak pulls in the CoreBluetooth bindings automatically:
 #   pyobjc-core, pyobjc-framework-corebluetooth, pyobjc-framework-libdispatch
-# On Windows, bleak uses the built-in WinRT Bluetooth API — no extra packages.
+# On Windows, bleak uses the built-in WinRT Bluetooth API, with no extra packages.
 # On Linux, bleak uses BlueZ over D-Bus (for reference; WAMBLE targets mac/win).
 
 bleak>=3.0.2,<4
 rich>=13.0
-# Development / test dependencies.
+
+# Test dependencies.
 pytest>=8.0
 pytest-asyncio>=1.0
+
+# Quality tooling enforced in CI. ruff's minor version is pinned so a new release
+# cannot add rules that fail CI without a deliberate bump.
+ruff>=0.16,<0.17
+vulture>=2.14
+pylint>=3.2,<5

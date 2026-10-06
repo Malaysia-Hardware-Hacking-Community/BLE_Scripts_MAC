@@ -3,14 +3,14 @@
 Provides battery level query matching bluez gatttool's common usage pattern.
 The Battery Service UUID is 0x180F and the Battery Level characteristic is 0x2A19.
 """
+
 import argparse
 import asyncio
 
-from bleak import BleakClient
-from bleak import normalize_uuid_str
+from bleak import BleakClient, normalize_uuid_str
 from rich.console import Console
 
-from ble_common import connect, enumerate_services, fmt_bytes, short_uuid
+from ble_common import add_connection_args, connect, enumerate_services, fmt_bytes, short_uuid
 
 console = Console()
 
@@ -52,9 +52,7 @@ def find_battery_characteristic(client: BleakClient, char_uuid: str = BATTERY_LE
     return None
 
 
-async def read_battery_raw(
-    client: BleakClient, char_uuid: str = BATTERY_LEVEL_UUID
-):
+async def read_battery_raw(client: BleakClient, char_uuid: str = BATTERY_LEVEL_UUID):
     """Read the Battery Level characteristic, returning (char, raw_bytes).
 
     *char* is None when no matching characteristic exists; *raw_bytes* is None
@@ -70,30 +68,26 @@ async def read_battery_raw(
 
 
 async def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Gatttool-compatible battery service query."
-    )
+    parser = argparse.ArgumentParser(description="Gatttool-compatible battery service query.")
     parser.add_argument("device", help="Device address or name")
     parser.add_argument(
-        "--service", default=BATTERY_SERVICE_UUID,
-        help="Battery service UUID (default: 0000180f-0000-1000-8000-00805f9b34fb)"
+        "--service",
+        default=BATTERY_SERVICE_UUID,
+        help="Battery service UUID (default: 0000180f-0000-1000-8000-00805f9b34fb)",
     )
     parser.add_argument(
-        "--char", default=BATTERY_LEVEL_UUID,
-        help="Battery level characteristic UUID (default: 00002a19-0000-1000-8000-00805f9b34fb)"
+        "--char",
+        default=BATTERY_LEVEL_UUID,
+        help="Battery level characteristic UUID (default: 00002a19-0000-1000-8000-00805f9b34fb)",
     )
     parser.add_argument(
-        "--format", "-f", choices=["percentage", "raw", "decimal"], default="percentage",
-        help="Output format (default: percentage)"
+        "--format",
+        "-f",
+        choices=["percentage", "raw", "decimal"],
+        default="percentage",
+        help="Output format (default: percentage)",
     )
-    parser.add_argument(
-        "--scan-timeout", type=float, default=15,
-        help="Scan timeout in seconds"
-    )
-    parser.add_argument(
-        "--connect-timeout", type=float, default=30,
-        help="Connection timeout in seconds"
-    )
+    add_connection_args(parser)
 
     args = parser.parse_args()
 

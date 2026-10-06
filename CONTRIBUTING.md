@@ -46,13 +46,20 @@ clients, so you can run it anywhere.
 python -m pytest -q
 ```
 
-Please run the tests before you open a pull request, and add tests for any new
-behavior. If you have `pyflakes` installed, a quick lint pass catches unused
-imports:
+Before you open a pull request, run the same checks CI runs. Installing the
+requirements installs all of the tools:
 
 ```bash
-python -m pyflakes *.py BLE-Exploits/*.py
+python -m pytest -q                                   # tests
+ruff check .                                           # redundancy, slow patterns, complexity
+ruff format --check .                                  # formatting
+vulture *.py BLE-Exploits/*.py --min-confidence 80     # dead code
+pylint --disable=all --enable=duplicate-code *.py BLE-Exploits/*.py  # duplicate logic
 ```
+
+CI runs these on every push and pull request, so a change that adds dead code,
+duplicated logic, an unused import, or a slow pattern will fail the build. Run
+`ruff check --fix .` and `ruff format .` to fix most findings automatically.
 
 If your change could affect a real device, say so in the pull request and
 describe what you tested it against. Testing on hardware is appreciated but not

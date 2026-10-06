@@ -9,7 +9,7 @@ level, and ``ble_common`` imports from here *inside function bodies* only.
 """
 
 import re
-from typing import Any, Optional
+from typing import Any
 
 from ble_common import short_uuid
 
@@ -35,7 +35,7 @@ def target_label(target: Any) -> str:
     return f"{kind} {short_uuid(target.uuid)} (handle {target.handle})"
 
 
-def as_handle(text: str) -> Optional[int]:
+def as_handle(text: str) -> int | None:
     """Parse *text* as a handle, or return None if it is not handle-shaped."""
     if not _HANDLE_RE.match(text):
         return None
@@ -58,13 +58,13 @@ def _uuid_matches(needle: str, uuid_value: str) -> bool:
     """
     target = str(uuid_value).strip().casefold()
     needle = needle.casefold()
-    bare = needle[2:] if needle.startswith("0x") else needle
+    bare = needle.removeprefix("0x")
     if needle in target or (bare and bare in target):
         return True
     return short_uuid(needle).casefold() in short_uuid(target).casefold()
 
 
-def resolve_target(client, specifier: str | int) -> Optional[Any]:
+def resolve_target(client, specifier: str | int) -> Any | None:
     """Find a characteristic or descriptor by handle or UUID.
 
     Resolution order:

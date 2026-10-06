@@ -15,7 +15,7 @@ _EXPLOITS = Path(__file__).resolve().parent.parent / "BLE-Exploits"
 if str(_EXPLOITS) not in sys.path:
     sys.path.insert(0, str(_EXPLOITS))
 
-from ble_replay import load_commands  # noqa: E402
+from ble_replay import load_commands
 
 
 def _write(tmp_path, obj) -> str:
@@ -27,7 +27,12 @@ def _write(tmp_path, obj) -> str:
 def test_loads_commands_with_packet_hex(tmp_path):
     path = _write(
         tmp_path,
-        {"commands": [{"action": "power on", "packet_hex": "33 01 01"}, {"action": "off", "packet_hex": "33 01 00"}]},
+        {
+            "commands": [
+                {"action": "power on", "packet_hex": "33 01 01"},
+                {"action": "off", "packet_hex": "33 01 00"},
+            ]
+        },
     )
     cmds = load_commands(path)
     assert [c["action"] for c in cmds] == ["power on", "off"]

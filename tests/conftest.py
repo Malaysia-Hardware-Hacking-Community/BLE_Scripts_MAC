@@ -15,6 +15,10 @@ from bleak import normalize_uuid_str
 # The scripts live in the repository root, not in ``tests/``.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+# Normalised once at import so they are not recomputed in default arguments.
+_BATTERY_LEVEL_UUID = normalize_uuid_str("2a19")
+_BATTERY_SERVICE_UUID = normalize_uuid_str("180f")
+
 
 class FakeDescriptor:
     def __init__(
@@ -22,7 +26,7 @@ class FakeDescriptor:
         uuid,
         handle,
         characteristic_handle=1,
-        characteristic_uuid=normalize_uuid_str("2a19"),
+        characteristic_uuid=_BATTERY_LEVEL_UUID,
     ):
         self.uuid = normalize_uuid_str(uuid)
         self.handle = handle
@@ -41,7 +45,7 @@ class FakeCharacteristic:
         handle,
         properties=(),
         descriptors=(),
-        service_uuid=normalize_uuid_str("180f"),
+        service_uuid=_BATTERY_SERVICE_UUID,
         service_handle=1,
         max_write_without_response_size=20,
     ):

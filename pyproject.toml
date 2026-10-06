@@ -1,0 +1,54 @@
+# Tooling configuration for WAMBLE. There is no build step; the scripts run
+# directly. This file holds the strict lint rules the CI enforces.
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+# Do not lint or reformat the virtualenv, or Python snippets embedded in docs.
+extend-exclude = [".venv", "*.md"]
+
+[tool.ruff.lint]
+# A focused, strict rule set aimed at the things that actually rot a codebase:
+# dead code, duplicated and redundant logic, and slow patterns. Pure formatting
+# is intentionally left out so the linter stays about correctness, not layout.
+select = [
+    "F",    # pyflakes: unused imports and names, undefined names
+    "B",    # flake8-bugbear: likely bugs and redundant constructs
+    "C4",   # flake8-comprehensions: simpler, faster comprehensions
+    "SIM",  # flake8-simplify: collapsible and duplicated branches
+    "PIE",  # flake8-pie: unnecessary code
+    "RET",  # flake8-return: redundant returns and assignments
+    "PERF", # perflint: slow patterns
+    "FURB", # refurb: redundant and dated patterns
+    "UP",   # pyupgrade: modern syntax
+    "I",    # isort: import ordering
+    "ARG",  # unused arguments
+    "RUF",  # ruff-specific, including unused noqa and unsorted __all__
+    "C90",  # mccabe: cap function complexity
+]
+ignore = [
+    # Explicit try/except/pass with a comment reads more clearly than
+    # contextlib.suppress in this codebase, and is a style choice, not a defect.
+    "SIM105",
+    # try/except inside a loop is deliberate per-item error handling here, and is
+    # effectively free on Python 3.11+ (zero-cost exceptions).
+    "PERF203",
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 15
+
+[tool.ruff.lint.per-file-ignores]
+# pytest passes fixtures as arguments, which ARG would wrongly call unused.
+"tests/*" = ["ARG"]
+
+[tool.pylint.similarities]
+# Only pylint's duplicate-code checker is used (see CI). Twelve identical lines
+# of logic is treated as copy-paste worth removing. The standard asyncio-CLI
+# idiom (connect, try/finally disconnect, the __main__ guard) is shorter than
+# this and is repeated on purpose so each script stays runnable on its own.
+min-similarity-lines = 12
+ignore-comments = true
+ignore-docstrings = true
+ignore-imports = true
+ignore-signatures = true

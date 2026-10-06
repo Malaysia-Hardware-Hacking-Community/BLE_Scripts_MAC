@@ -6,8 +6,6 @@ plugged in. The gatt_env fixture (conftest) exposes a readable+notify char at
 handle 0x0020 and a writable char at 0x0030.
 """
 
-import pytest
-
 from ble_ctf import (
     _hex_to_bytes,
     op_read,
@@ -90,4 +88,4 @@ async def test_op_listen_subscribes_triggers_captures_and_unsubscribes(gatt_env)
     assert any(e["text"] == "notif-flag" for e in events)
     op_names = [c[0] for c in client.calls]
     assert "write_gatt_char" in op_names  # the trigger write
-    assert "stop_notify" in op_names      # cleaned up the subscription
+    assert "stop_notify" in op_names  # cleaned up the subscription

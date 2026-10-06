@@ -4,7 +4,7 @@ import asyncio
 from rich.console import Console
 from rich.table import Table
 
-from ble_common import connect, decode_bytes, fmt_bytes
+from ble_common import add_connection_args, connect, decode_bytes, fmt_bytes
 
 console = Console()
 
@@ -26,12 +26,12 @@ FIELDS = {
 async def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("device")
-    parser.add_argument("--scan-timeout", type=float, default=15)
+    add_connection_args(parser)
     args = parser.parse_args()
 
     client = None
     try:
-        client = await connect(args.device, args.scan_timeout)
+        client = await connect(args.device, args.scan_timeout, args.connect_timeout)
         if client is None:
             console.print("[red]Failed to connect.[/red]")
             return

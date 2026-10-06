@@ -68,9 +68,11 @@ def _set_bracketed_paste(enabled: bool) -> None:
     except Exception:
         pass
 
+
 from rich.console import Console
 
 from ble_common import (
+    add_connection_args,
     connect,
     find_characteristic,
     print_characteristics_table,
@@ -102,9 +104,7 @@ console = Console()
 
 def _notification_callback(sender, data) -> None:
     """Print a GATT notification/indication. Shared so re-arming reuses it."""
-    console.print(
-        f"\n[cyan]Update from {sender.uuid} (handle {sender.handle}):[/cyan]"
-    )
+    console.print(f"\n[cyan]Update from {sender.uuid} (handle {sender.handle}):[/cyan]")
     show_value(data)
 
 
@@ -228,6 +228,7 @@ async def _keepalive(client, interval: float, lock: asyncio.Lock) -> None:
             except Exception:
                 pass  # a failed ping just means the next command will reconnect
 
+
 COMMANDS_HELP = (
     "Commands:\n"
     "  services         (list services)\n"
@@ -245,7 +246,9 @@ COMMANDS_HELP = (
 )
 
 
-async def _dispatch(client, parts, subscriptions, args) -> str | None:
+# A command router: one branch per REPL command. The branching is the point, so
+# the complexity cap is relaxed rather than hiding the dispatch behind a table.
+async def _dispatch(client, parts, subscriptions, args) -> str | None:  # noqa: C901
     """Run one REPL command. Returns "break" to end the session, else None.
 
     Always called while holding the command lock, so its GATT operations never
@@ -290,7 +293,9 @@ async def _dispatch(client, parts, subscriptions, args) -> str | None:
     if cmd == "read" and len(parts) == 2:
         char = find_characteristic(client, parts[1])
         if char is None:
-            console.print(f"[red]Characteristic not found.[/red]{_not_found_hint(client, parts[1])}")
+            console.print(
+                f"[red]Characteristic not found.[/red]{_not_found_hint(client, parts[1])}"
+            )
         elif "read" not in char.properties:
             console.print("[red]Not readable.[/red]")
         else:
@@ -303,7 +308,9 @@ async def _dispatch(client, parts, subscriptions, args) -> str | None:
     if cmd in {"write-req", "write-cmd"} and len(parts) == 3:
         char = find_characteristic(client, parts[1])
         if char is None:
-            console.print(f"[red]Characteristic not found.[/red]{_not_found_hint(client, parts[1])}")
+            console.print(
+                f"[red]Characteristic not found.[/red]{_not_found_hint(client, parts[1])}"
+            )
             return None
         response = cmd == "write-req"
         required = "write" if response else "write-without-response"
@@ -321,7 +328,9 @@ async def _dispatch(client, parts, subscriptions, args) -> str | None:
     if cmd in {"notify", "indicate", "unnotify"} and len(parts) == 2:
         char = find_characteristic(client, parts[1])
         if char is None:
-            console.print(f"[red]Characteristic not found.[/red]{_not_found_hint(client, parts[1])}")
+            console.print(
+                f"[red]Characteristic not found.[/red]{_not_found_hint(client, parts[1])}"
+            )
             return None
         key = char.handle
         if cmd == "unnotify":
@@ -354,11 +363,10 @@ async def _dispatch(client, parts, subscriptions, args) -> str | None:
     return None
 
 
-async def main():
+async def main():  # noqa: C901
     parser = argparse.ArgumentParser(description="Interactive BLE GATT client.")
     parser.add_argument("device")
-    parser.add_argument("--scan-timeout", type=float, default=15)
-    parser.add_argument("--connect-timeout", type=float, default=30)
+    add_connection_args(parser)
     parser.add_argument(
         "--keepalive",
         type=float,
@@ -393,9 +401,7 @@ async def main():
         # Handle Ctrl-C on the loop so it breaks the REPL cleanly instead of
         # cancelling mid-await (which can hang teardown during a notify stream).
         try:
-            asyncio.get_running_loop().add_signal_handler(
-                signal.SIGINT, prompt.interrupt
-            )
+            asyncio.get_running_loop().add_signal_handler(signal.SIGINT, prompt.interrupt)
         except (NotImplementedError, RuntimeError):
             pass  # not supported on this platform/loop; top-level handler covers it
         if args.keepalive > 0:
