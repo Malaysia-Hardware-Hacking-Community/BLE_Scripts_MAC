@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any, Optional, Callable, Dict
+from typing import Any, Optional, Callable
 from bleak import BleakClient, BleakScanner, normalize_uuid_str
 from bleak.backends.device import BLEDevice
 from rich.console import Console
@@ -48,53 +48,29 @@ def show_value(data: Any, label: str = "") -> None:
         console.print(f"  {label}Text: {text}" if label else f"  Text: {text}")
 
 
-#: Standard 16-bit UUIDs for commonly-queried BLE services and characteristics
-#: See https://www.bluetooth.com/specifications/assigned-numbers/
-STANDARD_UUIDS: Dict[str, str] = {
-    # Generic Access / Generic Attribute
-    "1800": "Generic Access",
-    "1801": "Generic Attribute",
-    # Device Information
-    "180a": "Device Information",
-    # Alert
-    "1802": "Alert",
-    # Battery
-    "180f": "Battery",
-    # Health Thermometer
-    "1809": "Health Thermometer",
-    # Heart Rate
-    "180d": "Heart Rate",
-    # Cyclist Power
-    "1818": "Cyclist Power",
-    # Phone Alert
-    "180e": "Phone Alert",
-    # Running Cadence
-    "1814": "Running Cadence",
-    # Fitness Machine
-    "1826": "Fitness Machine",
-    # Continuous Spo2
-    "1822": "Continuous SpO2",
-    # Body Composition
-    "181d": "Body Composition",
-    # Alert Notification
-    "1812": "Alert Notification",
-    # Scan Parameters
-    "1813": "Scan Parameters",
-    # Device Name / Appearance, under Generic Access
-    "2a00": "Device Name",
-    "2a01": "Appearance",
-    # Battery Level / Battery Power, under Battery
-    "2a19": "Battery Level",
-    "2a1a": "Battery Power",
-    # Glucose
-    "2a18": "Glucose Measurement",
-    "2a39": "Heart Rate Control Point",
-    # Heart Rate
-    "2a37": "Heart Rate Measurement",
-    "2a38": "Body Sensor Location",
-    # Pulse Oximetry
-    "2a6e": "Pulse Oximetry",
-}
+#: Canonical display order for the GATT characteristic properties we surface.
+#: Any vendor or extended-property flags outside this set are not shown.
+DISPLAYED_PROPERTIES = (
+    "broadcast",
+    "read",
+    "write-without-response",
+    "write",
+    "notify",
+    "indicate",
+)
+
+
+def format_properties(props, empty: str = "—") -> str:
+    """Render a characteristic's property set in canonical order, Title-Cased.
+
+    Only the properties in :data:`DISPLAYED_PROPERTIES` are shown, each with its
+    hyphen turned to a space and title-cased (``"write-without-response"`` ->
+    ``"Write Without Response"``). Returns *empty* when none are present. This is
+    the single formatter behind every characteristic table in the toolkit.
+    """
+    present = set(props)
+    ordered = [p.replace("-", " ").title() for p in DISPLAYED_PROPERTIES if p in present]
+    return ", ".join(ordered) if ordered else empty
 
 
 def uuid16_from_128(uuid_128: str) -> Optional[str]:
@@ -119,12 +95,6 @@ def uuid16_from_128(uuid_128: str) -> Optional[str]:
         return None
     hex_16 = prefix[4:]
     return hex_16 if len(hex_16) == 4 else None
-
-
-def is_standard_uuid(uuid_128: str) -> bool:
-    """Return True if the UUID is a base UUID listed in :data:`STANDARD_UUIDS`."""
-    hex_16 = uuid16_from_128(uuid_128)
-    return hex_16 is not None and hex_16 in STANDARD_UUIDS
 
 
 def short_uuid(uuid_128: str) -> str:
@@ -317,15 +287,6 @@ class GATTTableBuilder:
         self._services = enumerate_services(client)
         return self
 
-    @staticmethod
-    def _format_props(props: set) -> str:
-        """Render a characteristic's property set as a compact string."""
-        ordered = []
-        for p in ("broadcast", "read", "write-without-response", "write", "notify", "indicate"):
-            if p in props:
-                ordered.append(p.replace("-", " ").title())
-        return ", ".join(ordered) if ordered else "—"
-
     def build(self) -> Table:
         """Render the loaded characteristics as a rich Table.
 
@@ -345,7 +306,7 @@ class GATTTableBuilder:
                     short_uuid(ch.uuid),
                     ch.description or "—",
                     str(ch.handle),
-                    self._format_props(ch.properties),
+                    format_properties(ch.properties),
                 )
         return table
 
@@ -489,8 +450,8 @@ __all__ = [
     "write_gatt_char",
     "parse_advertisement_data",
     "uuid16_from_128",
-    "is_standard_uuid",
     "short_uuid",
+    "format_properties",
+    "DISPLAYED_PROPERTIES",
     "BASE_UUID_SUFFIX",
-    "STANDARD_UUIDS",
 ]

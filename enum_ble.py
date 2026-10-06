@@ -10,6 +10,7 @@ from ble_common import (
     connect,
     decode_bytes,
     fmt_bytes,
+    format_properties,
     short_uuid,
     show_value,
 )
@@ -36,11 +37,6 @@ CTF_INTERESTING_UUIDS = {
     # 128-bit UUIDs that sometimes appear in CTF challenges
     # (these are just hints; actual 128-bit would be full hash)
 }
-
-
-def ctfflag_highlight(text: str) -> str:
-    """Apply rich formatting to make potential flags stand out."""
-    return f"[bold magenta]{text}[/bold magenta]"
 
 
 async def main():
@@ -249,10 +245,7 @@ async def main():
                 if filter_uuid and filter_uuid not in str(ch.uuid).lower():
                     continue
 
-                props_str = ", ".join(
-                    p.replace("-", " ").title() for p in ch.properties
-                    if p in ("broadcast", "read", "write-without-response", "write", "notify", "indicate")
-                )
+                props_str = format_properties(ch.properties)
                 console.print(
                     f"  [cyan]UUID {ch.uuid}[/cyan] handle={ch.handle} props={props_str}"
                 )

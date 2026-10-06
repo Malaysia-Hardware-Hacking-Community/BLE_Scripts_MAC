@@ -157,8 +157,10 @@ async def main():
         async with scanner:
             async with asyncio.timeout(args.timeout):
                 await asyncio.Event().wait()
-    except (TimeoutError, KeyboardInterrupt):
-        if args.timeout and console.is_terminal:
+    except TimeoutError:
+        pass  # normal: the scan ran for its full requested duration
+    except KeyboardInterrupt:
+        if console.is_terminal:
             console.print("[yellow]Scan interrupted.[/yellow]")
 
     table, rows = make_table(found)

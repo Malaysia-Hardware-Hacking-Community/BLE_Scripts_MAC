@@ -5,27 +5,52 @@ import signal
 import sys
 import threading
 
-# Importing readline makes input() use a proper line editor: it handles
-# bracketed-paste (so pasted text is not mangled by ESC[200~…ESC[201~ wrappers),
-# and adds history and editing. Guarded so the client still runs where readline
-# is unavailable (e.g. a stock Windows Python without pyreadline).
 try:
-    import readline  # noqa: F401
+    import termios  # POSIX only; used to guarantee the terminal is restored.
+except ImportError:  # pragma: no cover - Windows
+    termios = None
 
-    # Turn bracketed paste OFF so a Cmd-V paste arrives as ordinary keystrokes
-    # that the terminal echoes and input() reads, instead of being captured by
-    # readline's paste handler (which, under the TUI, was swallowing the paste
-    # so nothing appeared at all). See also _set_bracketed_paste below.
-    try:
-        readline.parse_and_bind("set enable-bracketed-paste off")
-    except Exception:
-        pass
-except ImportError:
-    pass
+# NOTE: readline is deliberately NOT imported.
+#
+# On macOS, input()'s line editor is libedit, which puts the terminal into a raw
+# mode where a *typed* Ctrl-C (byte 0x03) is read as an ordinary character
+# instead of raising SIGINT. Because the prompt runs on a background thread (so
+# keepalive can ping while we wait for a command), that input() call then never
+# returns on Ctrl-C: the REPL cannot be interrupted and the terminal is left in
+# raw mode — the "stuck, can't type anything" hang. Without readline, input()
+# uses the kernel's canonical line discipline, where Ctrl-C raises SIGINT
+# normally and the terminal is never left raw. The only cost is no in-line
+# history/editing, an acceptable trade for a prompt that can always be
+# interrupted. Paste still works: bracketed paste is disabled (see
+# _set_bracketed_paste) so a Cmd-V arrives as ordinary typed characters.
 
 #: Bracketed-paste wrappers a terminal puts around pasted text; stripped as a
 #: safety net in case they reach input() anyway.
 _PASTE_MARKERS = ("\x1b[200~", "\x1b[201~")
+
+
+def _save_terminal():
+    """Snapshot the stdin terminal attributes, or None if not applicable."""
+    if termios is None or not sys.stdin.isatty():
+        return None
+    try:
+        return termios.tcgetattr(sys.stdin.fileno())
+    except Exception:
+        return None
+
+
+def _restore_terminal(saved) -> None:
+    """Restore terminal attributes saved by :func:`_save_terminal`.
+
+    A last-resort guarantee that the shell is usable after exit even if some
+    library left the terminal in raw/no-echo mode.
+    """
+    if termios is None or saved is None or not sys.stdin.isatty():
+        return
+    try:
+        termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, saved)
+    except Exception:
+        pass
 
 
 def _set_bracketed_paste(enabled: bool) -> None:
@@ -347,6 +372,7 @@ async def main():
     subscriptions = {}  # handle -> characteristic UUID, for re-arming on reconnect
     lock = asyncio.Lock()
     keepalive_task = None
+    saved_term = _save_terminal()  # restored on exit so the shell stays usable
 
     try:
         client = await connect(args.device, args.scan_timeout, args.connect_timeout)
@@ -411,6 +437,7 @@ async def main():
             except BaseException:
                 pass
         _set_bracketed_paste(True)  # restore the terminal's normal paste mode
+        _restore_terminal(saved_term)  # guarantee a usable shell after exit
         # Bound the disconnect so a wedged BLE stack (e.g. mid notify-stream)
         # can't hang exit; disconnecting also drops any notify subscriptions.
         if client is not None:

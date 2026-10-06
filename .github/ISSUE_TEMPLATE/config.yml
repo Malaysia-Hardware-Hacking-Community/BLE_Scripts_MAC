@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Question or help
+    url: https://github.com/Malaysia-Hardware-Hacking-Community/WAMBLE/blob/main/SUPPORT.md
+    about: Not sure if it is a bug? See SUPPORT.md for where to ask.
+  - name: Report a security problem
+    url: https://github.com/Malaysia-Hardware-Hacking-Community/WAMBLE/blob/main/SECURITY.md
+    about: Please report security issues privately. See SECURITY.md.

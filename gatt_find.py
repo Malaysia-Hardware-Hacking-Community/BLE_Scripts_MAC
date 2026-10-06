@@ -11,8 +11,9 @@ from rich.console import Console
 from rich.table import Table
 
 from ble_common import (
-    GATTTableBuilder,
     connect,
+    enumerate_services,
+    format_properties,
 )
 
 console = Console()
@@ -27,19 +28,16 @@ async def find_by_uuid(client: BleakClient, uuid_substring: str, target: str = "
         target: "char" to find characteristics, "descr" to find descriptors
     """
     uuid_lower = uuid_substring.lower()
-    builder = GATTTableBuilder(
-        title=f"Found {target}s matching '{uuid_substring}'", header_style="bold cyan"
-    )
-    builder.add_services(client)
+    services = enumerate_services(client)
 
     found = []
     if target == "char":
-        for _svc, chars in builder.services:
+        for _svc, chars in services:
             for ch in chars.values():
                 if uuid_lower in str(ch.uuid).lower():
                     found.append(ch)
     else:  # descr: search descriptors only, never characteristics
-        for _svc, chars in builder.services:
+        for _svc, chars in services:
             for ch in chars.values():
                 for d in ch.descriptors:
                     if uuid_lower in str(d.uuid).lower():
@@ -60,11 +58,7 @@ async def find_by_uuid(client: BleakClient, uuid_substring: str, target: str = "
 
     for item in found:
         if target == "char":
-            props = ", ".join(
-                p.replace("-", " ").title() for p in item.properties
-                if p in ("broadcast", "read", "write-without-response", "write", "notify", "indicate")
-            )
-            table.add_row(str(item.uuid), str(item.handle), props)
+            table.add_row(str(item.uuid), str(item.handle), format_properties(item.properties))
         else:
             table.add_row(str(item.uuid), str(item.handle))
 
@@ -115,4 +109,7 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Cancelled.[/yellow]")

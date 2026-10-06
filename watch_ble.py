@@ -94,14 +94,13 @@ async def main() -> None:
         refresh_per_second=args.refresh,
         screen=False,
     ):
+        # `async with scanner` stops the scanner on exit (including on Ctrl-C
+        # cancellation), so there is no separate stop() to keep in sync.
         async with scanner:
-            try:
-                if args.timeout is None:
-                    await asyncio.Event().wait()  # until cancelled
-                else:
-                    await asyncio.sleep(args.timeout)
-            finally:
-                await scanner.stop()
+            if args.timeout is None:
+                await asyncio.Event().wait()  # until cancelled
+            else:
+                await asyncio.sleep(args.timeout)
 
     if latest:
         console.print(f"[dim]{len(latest)} device(s) seen.[/dim]")
