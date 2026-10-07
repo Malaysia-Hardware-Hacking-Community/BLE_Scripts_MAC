@@ -99,6 +99,7 @@ is named in the first column), and every tool takes `--help`.
 | ---------------------------------------------------------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | `wamble-scan` ([`scan`](src/wamble/scan.py))                     | `bluetoothctl scan on`, `hcitool scan` | Scan advertisements for a fixed window. Filter by name, service UUID or RSSI. Optionally dump JSON or CSV.                             |
 | `wamble-watch` ([`watch`](src/wamble/watch.py))                  | `btmon`                                | Live-refreshing view of advertisements, strongest signal first, until interrupted.                                                     |
+| `wamble-adv-log` ([`adv_log`](src/wamble/adv_log.py))            | n/a                                    | Log advertisements to CSV over time (one timestamped row per sighting). See [Logging advertisements](#logging-advertisements-over-time). |
 | `wamble-enum` ([`enum`](src/wamble/enum.py))                     | `gatttool -a`                          | Connect, list every service, characteristic and descriptor, and optionally read, list writable, or subscribe. Has a CTF-oriented mode. |
 | `wamble-gatt` ([`interactive`](src/wamble/interactive.py))       | `gatttool` interactive mode            | REPL: read, write, subscribe and unsubscribe against a live connection. See the [cheatsheet](docs/GATT-CLI-CHEATSHEET.md).            |
 | `wamble-find` ([`find`](src/wamble/find.py))                     | `gatttool find`                        | Find characteristics or descriptors by UUID substring.                                                                                 |
@@ -134,6 +135,22 @@ the same per-device fields.
 wamble-watch                      # refresh until Ctrl-C
 wamble-watch --name Acme --timeout 60
 ```
+
+### Logging advertisements over time
+
+Where `wamble-watch` shows a live view, `wamble-adv-log` appends a timestamped
+CSV row per advertisement sighting, so you get a time-series of presence and RSSI
+to analyse later:
+
+```bash
+wamble-adv-log -o log.csv                 # log everything until Ctrl-C
+wamble-adv-log -o log.csv --timeout 300   # log for five minutes
+wamble-adv-log -n Fitbit --min-interval 5 # one row per matching device per 5s
+```
+
+Columns are `timestamp, address, name, rssi, service_uuids, manufacturer`. With
+no `-o` the CSV goes to stdout (status stays on stderr) so it pipes cleanly, and
+`--min-interval` throttles how often each device is logged.
 
 ### Enumerating GATT attributes
 

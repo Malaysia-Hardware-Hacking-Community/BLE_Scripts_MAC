@@ -9,6 +9,11 @@ tagging releases.
 
 ### Added
 
+- `wamble-adv-log`: log BLE advertisements to CSV over time, one timestamped row
+  per sighting (`timestamp, address, name, rssi, service_uuids, manufacturer`),
+  until Ctrl-C or `--timeout`. Writes to a file with `-o` or to stdout for
+  piping (status stays on stderr), with `--name`/`--min-rssi` filters and a
+  per-device `--min-interval` throttle.
 - `wamble-export`: dump a device's full GATT tree (services, characteristics,
   descriptors, properties) to stable, sorted JSON with `-o`, and compare two
   snapshots offline with `--diff OLD NEW`. The diff reports services and

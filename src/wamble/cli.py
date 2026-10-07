@@ -96,6 +96,12 @@ def export() -> None:
     _run(main)
 
 
+def adv_log() -> None:
+    from wamble.adv_log import main
+
+    _run(main, "Stopped.")
+
+
 def targets() -> None:
     # The target-profile manager is synchronous (it only reads and writes a JSON
     # file), so it is called directly rather than through the asyncio _run helper.
