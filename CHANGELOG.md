@@ -9,6 +9,13 @@ tagging releases.
 
 ### Added
 
+- Advertisement identification. `wamble-scan` and `wamble-watch` now say what an
+  unnamed device actually is: they decode the manufacturer company ID to a vendor
+  name (a curated subset of the Bluetooth SIG list, e.g. Apple, Samsung, Google,
+  Microsoft, Xiaomi), recognise iBeacon and Eddystone frames, and fill a
+  `(unnamed)` row with a derived identity such as `· Apple · iBeacon`. The
+  advertised-services column now names known UUIDs (16-bit and 128-bit alike),
+  and the manufacturer column names the vendor. New `wamble.identify` module.
 - `wamble-notify-log`: subscribe to a device's notify/indicate characteristics
   and log each notification to CSV with timestamps (`timestamp, elapsed,
   characteristic, handle, length, value_hex, text`). Subscribes to all

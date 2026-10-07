@@ -9,7 +9,8 @@ from bleak import BleakScanner
 from rich.console import Console
 from rich.table import Table
 
-from wamble.common import parse_advertisement_data, short_uuid
+from wamble.common import parse_advertisement_data, short_uuid, uuid_name
+from wamble.identify import decode_manufacturer, identify
 
 console = Console()
 
@@ -40,6 +41,13 @@ def service_uuid_matches(service_filter: str, adv_service_uuids) -> bool:
         if needle_canon == short_uuid(uuid).casefold():  # 16-bit <-> 128-bit
             return True
     return False
+
+
+def _service_label(uuid: Any) -> str:
+    """A compact UUID with its assigned name appended when known."""
+    short = short_uuid(uuid)
+    name = uuid_name(uuid)
+    return f"{short} ({name})" if name else short
 
 
 def make_table(
@@ -77,13 +85,18 @@ def make_table(
         # Parse advertisement data
         adv_data = parse_advertisement_data(adv)
 
-        name = device.name or adv.local_name or "(unnamed)"
+        # Fall back to a derived identity (vendor and/or beacon) for a device
+        # that advertises no name, so "(unnamed)" rows say what they really are.
+        name = device.name or adv.local_name
+        if not name:
+            name = f"· {identify(adv)}" if identify(adv) else "(unnamed)"
 
-        # Format service UUIDs
+        # Format service UUIDs, naming the known ones (16-bit and 128-bit alike).
         adv_uuids = adv.service_uuids or []
-        services_str = ", ".join(short_uuid(u) for u in adv_uuids) or "—"
+        services_str = ", ".join(_service_label(u) for u in adv_uuids) or "—"
 
-        manufacturer = adv_data.get("manufacturer") or "—"
+        # Name the vendor behind the manufacturer company ID where it is known.
+        manufacturer = decode_manufacturer(adv) or "—"
         service_data = adv_data.get("service_data", {})
 
         # Show at most the first three service-data entries.
@@ -283,7 +296,9 @@ async def main():
     else:
         if args.plain:
             for index, (address, device, adv) in enumerate(rows, 1):
-                name = device.name or adv.local_name or "(unnamed)"
+                name = device.name or adv.local_name
+                if not name:
+                    name = f"· {identify(adv)}" if identify(adv) else "(unnamed)"
                 rssi = adv.rssi if adv.rssi is not None else "—"
                 print(f"{index}. {name} [{address}] RSSI: {rssi}")
         else:

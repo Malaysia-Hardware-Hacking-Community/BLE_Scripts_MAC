@@ -97,7 +97,7 @@ is named in the first column), and every tool takes `--help`.
 
 | Command (module)                                                 | Replaces (Linux)                       | What it does                                                                                                                           |
 | ---------------------------------------------------------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `wamble-scan` ([`scan`](src/wamble/scan.py))                     | `bluetoothctl scan on`, `hcitool scan` | Scan advertisements for a fixed window. Filter by name, service UUID or RSSI. Optionally dump JSON or CSV.                             |
+| `wamble-scan` ([`scan`](src/wamble/scan.py))                     | `bluetoothctl scan on`, `hcitool scan` | Scan advertisements for a fixed window; names unnamed devices by vendor/beacon. Filter by name, service UUID or RSSI. Dump JSON or CSV. |
 | `wamble-watch` ([`watch`](src/wamble/watch.py))                  | `btmon`                                | Live-refreshing view of advertisements, strongest signal first, until interrupted.                                                     |
 | `wamble-adv-log` ([`adv_log`](src/wamble/adv_log.py))            | n/a                                    | Log advertisements to CSV over time (one timestamped row per sighting). See [Logging advertisements](#logging-advertisements-over-time). |
 | `wamble-notify-log` ([`notify_log`](src/wamble/notify_log.py))   | n/a                                    | Subscribe to a device's notifications and log each one to CSV with timestamps. See [Logging notifications](#logging-notifications).    |
@@ -129,6 +129,13 @@ wamble-scan --csv scan.csv                 # save results as CSV (one row per de
 
 `--write-to` and `--csv` can be combined to write both at once, and both carry
 the same per-device fields.
+
+A device that advertises no name is not left as a bare `(unnamed)`: WAMBLE reads
+its advertisement and shows what it is. The manufacturer company ID is decoded to
+a vendor name (a curated set of common vendors, e.g. `Apple`, `Samsung`,
+`Google`), iBeacon and Eddystone frames are recognised, and the row is labelled
+with that identity (for example `· Apple · iBeacon`). The advertised-services
+column names known UUIDs too. `wamble-watch` does the same in its live view.
 
 ### Watching advertisements live
 
