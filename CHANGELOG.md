@@ -9,6 +9,42 @@ tagging releases.
 
 ### Added
 
+- `wamble-profile`: subscribe to and decode a standard SIG measurement profile,
+  the way `wamble-battery` reads one characteristic. Handles Heart Rate
+  Measurement (`0x2A37`), Temperature Measurement (`0x2A1C`, Health Thermometer)
+  and CSC Measurement (`0x2A5B`), decoding each flags-driven layout (including
+  the IEEE-11073 float for temperature) and printing a reading per update.
+  Auto-detects the profile when `-p` is omitted.
+- `wamble-batch`: run a script of GATT commands non-interactively, from a file
+  or stdin, against one connection. It uses exactly the same commands as
+  `wamble-gatt` (reusing its dispatcher), plus a `wait <seconds>` line for
+  holding the link open, for example to capture notifications after `notify`.
+- Advertisement identification. `wamble-scan` and `wamble-watch` now say what an
+  unnamed device actually is: they decode the manufacturer company ID to a vendor
+  name (a curated subset of the Bluetooth SIG list, e.g. Apple, Samsung, Google,
+  Microsoft, Xiaomi), recognise iBeacon and Eddystone frames, and fill a
+  `(unnamed)` row with a derived identity such as `· Apple · Nearby Info`. For
+  Apple devices it decodes the Continuity message type (Nearby, AirDrop, Handoff,
+  Find My, Proximity Pairing, ...), and for Proximity Pairing it names the
+  accessory model from a curated table (AirPods, AirPods Pro, Beats, ...). A
+  passive scan cannot reveal a phone's exact model (iPhone 15 vs 13); that is not
+  broadcast. The advertised-services column now names known UUIDs (16-bit and
+  128-bit alike), and the manufacturer column names the vendor. New
+  `wamble.identify` module.
+- `wamble-enum` now prints a prominent `Device:` line with the manufacturer and
+  model read from the Device Information Service (0x180A) when the device exposes
+  it, which is the reliable place a real model string lives (phones do not
+  expose it to an unpaired central).
+- `wamble-notify-log`: subscribe to a device's notify/indicate characteristics
+  and log each notification to CSV with timestamps (`timestamp, elapsed,
+  characteristic, handle, length, value_hex, text`). Subscribes to all
+  notifiable characteristics by default, or named ones with repeated `-c`, and
+  runs until Ctrl-C or `--timeout`.
+- `wamble-adv-log`: log BLE advertisements to CSV over time, one timestamped row
+  per sighting (`timestamp, address, name, rssi, service_uuids, manufacturer`),
+  until Ctrl-C or `--timeout`. Writes to a file with `-o` or to stdout for
+  piping (status stays on stderr), with `--name`/`--min-rssi` filters and a
+  per-device `--min-interval` throttle.
 - `wamble-export`: dump a device's full GATT tree (services, characteristics,
   descriptors, properties) to stable, sorted JSON with `-o`, and compare two
   snapshots offline with `--diff OLD NEW`. The diff reports services and

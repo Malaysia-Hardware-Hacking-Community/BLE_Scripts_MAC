@@ -9,9 +9,16 @@ from rich.console import Console
 from rich.live import Live
 from rich.table import Table
 
-from wamble.common import parse_advertisement_data, short_uuid
+from wamble.common import short_uuid, uuid_name
+from wamble.identify import decode_manufacturer, identify
 
 console = Console()
+
+
+def _service_label(uuid) -> str:
+    """A compact UUID with its assigned name appended when known."""
+    name = uuid_name(uuid)
+    return f"{short_uuid(uuid)} ({name})" if name else short_uuid(uuid)
 
 
 def build_table(latest: dict) -> Table:
@@ -33,13 +40,16 @@ def build_table(latest: dict) -> Table:
         reverse=True,
     )
     for device, adv, seen in ordered:
+        name = device.name or adv.local_name
+        if not name:
+            name = f"· {identify(adv)}" if identify(adv) else "(unnamed)"
         table.add_row(
-            device.name or adv.local_name or "(unnamed)",
+            name,
             device.address,
             str(adv.rssi) if adv.rssi is not None else "—",
             seen.strftime("%H:%M:%S"),
-            ", ".join(short_uuid(u) for u in (adv.service_uuids or [])) or "—",
-            parse_advertisement_data(adv)["manufacturer"] or "—",
+            ", ".join(_service_label(u) for u in (adv.service_uuids or [])) or "—",
+            decode_manufacturer(adv) or "—",
         )
     return table
 

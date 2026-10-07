@@ -15,6 +15,8 @@ from wamble.common import (
 console = Console()
 
 DEVICE_INFO_UUID = "0000180a-0000-1000-8000-00805f9b34fb"
+MANUFACTURER_UUID = "00002a29-0000-1000-8000-00805f9b34fb"
+MODEL_UUID = "00002a24-0000-1000-8000-00805f9b34fb"
 
 FIELDS = {
     "00002a29-0000-1000-8000-00805f9b34fb": "Manufacturer Name",
@@ -27,6 +29,34 @@ FIELDS = {
     "00002a2a-0000-1000-8000-00805f9b34fb": "IEEE Certification",
     "00002a50-0000-1000-8000-00805f9b34fb": "PnP ID",
 }
+
+
+async def read_identity(client) -> str:
+    """Return "Manufacturer Model" read from the Device Information Service.
+
+    Reads the Manufacturer Name (0x2A29) and Model Number (0x2A24) and joins the
+    ones that are present and readable, so a connected device can report what it
+    actually is. Returns "" when the device exposes neither (common on phones,
+    which do not let an unpaired central read these).
+    """
+    chars = {
+        char.uuid.casefold(): char
+        for service in client.services
+        if service.uuid.casefold() == DEVICE_INFO_UUID
+        for char in service.characteristics
+    }
+    parts = []
+    for uuid in (MANUFACTURER_UUID, MODEL_UUID):
+        char = chars.get(uuid)
+        if char is None or "read" not in char.properties:
+            continue
+        try:
+            text = decode_bytes(await client.read_gatt_char(char))
+        except Exception:
+            continue
+        if text and not text.startswith("("):
+            parts.append(text.strip())
+    return " ".join(parts)
 
 
 async def main():

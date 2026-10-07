@@ -97,12 +97,16 @@ is named in the first column), and every tool takes `--help`.
 
 | Command (module)                                                 | Replaces (Linux)                       | What it does                                                                                                                           |
 | ---------------------------------------------------------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `wamble-scan` ([`scan`](src/wamble/scan.py))                     | `bluetoothctl scan on`, `hcitool scan` | Scan advertisements for a fixed window. Filter by name, service UUID or RSSI. Optionally dump JSON or CSV.                             |
+| `wamble-scan` ([`scan`](src/wamble/scan.py))                     | `bluetoothctl scan on`, `hcitool scan` | Scan advertisements for a fixed window; names unnamed devices by vendor/beacon. Filter by name, service UUID or RSSI. Dump JSON or CSV. |
 | `wamble-watch` ([`watch`](src/wamble/watch.py))                  | `btmon`                                | Live-refreshing view of advertisements, strongest signal first, until interrupted.                                                     |
+| `wamble-adv-log` ([`adv_log`](src/wamble/adv_log.py))            | n/a                                    | Log advertisements to CSV over time (one timestamped row per sighting). See [Logging advertisements](#logging-advertisements-over-time). |
+| `wamble-notify-log` ([`notify_log`](src/wamble/notify_log.py))   | n/a                                    | Subscribe to a device's notifications and log each one to CSV with timestamps. See [Logging notifications](#logging-notifications).    |
 | `wamble-enum` ([`enum`](src/wamble/enum.py))                     | `gatttool -a`                          | Connect, list every service, characteristic and descriptor, and optionally read, list writable, or subscribe. Has a CTF-oriented mode. |
 | `wamble-gatt` ([`interactive`](src/wamble/interactive.py))       | `gatttool` interactive mode            | REPL: read, write, subscribe and unsubscribe against a live connection. See the [cheatsheet](docs/GATT-CLI-CHEATSHEET.md).            |
+| `wamble-batch` ([`batch`](src/wamble/batch.py))                  | `gatttool` scripting                   | Run a script of the same GATT commands non-interactively, from a file or stdin. See [Scripting](#scripting-batch-commands).            |
 | `wamble-find` ([`find`](src/wamble/find.py))                     | `gatttool find`                        | Find characteristics or descriptors by UUID substring.                                                                                 |
 | `wamble-battery` ([`battery`](src/wamble/battery.py))            | `gatttool -t Random -n 0x180f`         | Read the standard Battery Level characteristic (`0x2A19`).                                                                             |
+| `wamble-profile` ([`profiles`](src/wamble/profiles.py))          | n/a                                    | Subscribe to and decode a SIG measurement profile: Heart Rate, Health Thermometer, or CSC. See [Reading a profile](#reading-a-profile). |
 | `wamble-device-info` ([`device_info`](src/wamble/device_info.py))| n/a                                    | Read the Device Information Service (`0x180A`): model, serial, firmware, hardware revisions.                                           |
 | `wamble-mtu` ([`mtu`](src/wamble/mtu.py))                        | `gatttool -m`                          | Report the negotiated ATT MTU. Read-only; see [MTU](#mtu-and-connection-parameters).                                                   |
 | `wamble-params` ([`params`](src/wamble/params.py))               | `btmgmt conn-update`                   | Read or request the Peripheral Preferred Connection Parameters characteristic (`0x2A04`).                                              |
@@ -128,12 +132,60 @@ wamble-scan --csv scan.csv                 # save results as CSV (one row per de
 `--write-to` and `--csv` can be combined to write both at once, and both carry
 the same per-device fields.
 
+A device that advertises no name is not left as a bare `(unnamed)`: WAMBLE reads
+its advertisement and shows what it is. The manufacturer company ID is decoded to
+a vendor name (a curated set of common vendors, e.g. `Apple`, `Samsung`,
+`Google`), and for Apple devices the Continuity message type is decoded too, so a
+row reads `· Apple · Nearby Info`, `· Apple · Find My`, `· Apple · AirDrop`, and
+so on. iBeacon and Eddystone frames are recognised, and a Proximity Pairing
+message names the accessory model (`AirPods`, `AirPods Pro`, `Beats ...`) from a
+curated table. The advertised-services column names known UUIDs too.
+`wamble-watch` does the same in its live view.
+
+A passive scan **cannot** reveal a phone's exact model (iPhone 15 vs 13, Galaxy
+S21 vs Pixel): that is deliberately not broadcast. The reliable place a model
+string lives is the Device Information Service, which you read by connecting, so
+`wamble-enum` prints a `Device:` line with the manufacturer and model when the
+device exposes it (many accessories and IoT devices do; phones do not).
+
 ### Watching advertisements live
 
 ```bash
 wamble-watch                      # refresh until Ctrl-C
 wamble-watch --name Acme --timeout 60
 ```
+
+### Logging advertisements over time
+
+Where `wamble-watch` shows a live view, `wamble-adv-log` appends a timestamped
+CSV row per advertisement sighting, so you get a time-series of presence and RSSI
+to analyse later:
+
+```bash
+wamble-adv-log -o log.csv                 # log everything until Ctrl-C
+wamble-adv-log -o log.csv --timeout 300   # log for five minutes
+wamble-adv-log -n Fitbit --min-interval 5 # one row per matching device per 5s
+```
+
+Columns are `timestamp, address, name, rssi, service_uuids, manufacturer`. With
+no `-o` the CSV goes to stdout (status stays on stderr) so it pipes cleanly, and
+`--min-interval` throttles how often each device is logged.
+
+### Logging notifications
+
+`wamble-notify-log` subscribes to a connected device's notify/indicate
+characteristics and appends a timestamped CSV row per notification, so you can
+capture a sensor's stream to a file:
+
+```bash
+wamble-notify-log "HR Monitor" -o hr.csv            # all notify/indicate chars
+wamble-notify-log "HR Monitor" -c 2a37 --timeout 60 # just one, for a minute
+```
+
+Columns are `timestamp, elapsed, characteristic, handle, length, value_hex,
+text` (the `text` column shows a printable rendering when the bytes are text).
+By default it subscribes to every notify/indicate characteristic; name specific
+ones with repeated `-c`.
 
 ### Enumerating GATT attributes
 
@@ -161,6 +213,29 @@ read, write and subscribe commands take a UUID substring or a handle, matched
 case-insensitively. The [cheatsheet](docs/GATT-CLI-CHEATSHEET.md) explains each
 command and how to build payloads.
 
+### Scripting (batch commands)
+
+`wamble-batch` runs the same commands from a file (or stdin) instead of the
+prompt, against one connection, then disconnects. It adds a `wait <seconds>`
+line for holding the link open, which is useful after `notify` to capture a few
+updates:
+
+```bash
+wamble-batch "Device Name" script.txt
+cat script.txt | wamble-batch "Device Name" -      # read the script from stdin
+```
+
+```
+# script.txt — same commands as the prompt, plus wait
+services
+write-cmd 00010203-0405-0607-0809-0a0b0c0d2b11 3305020000...
+notify 2a37
+wait 5
+quit
+```
+
+Blank lines are skipped and anything after `#` is a comment.
+
 ### Finding a UUID, device info, battery
 
 ```bash
@@ -169,6 +244,20 @@ wamble-find "Acme Tracker" 2902 --target descr
 wamble-device-info "Acme Tracker"
 wamble-battery "Acme Tracker"
 ```
+
+### Reading a profile
+
+`wamble-profile` subscribes to a standard SIG measurement characteristic and
+prints a decoded reading per update. It knows Heart Rate (`0x2A37`), the Health
+Thermometer (`0x2A1C`) and Cycling Speed & Cadence (`0x2A5B`):
+
+```bash
+wamble-profile "HR Monitor"                 # auto-detect which profile is present
+wamble-profile "HR Monitor" -p heart-rate   # 72 bpm (contact)
+wamble-profile "Thermometer" --timeout 30   # 37.0 °C
+```
+
+With no `-p` it auto-detects the first supported profile the device exposes.
 
 ### Export and diff
 
