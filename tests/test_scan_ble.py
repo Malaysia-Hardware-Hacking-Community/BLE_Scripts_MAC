@@ -6,9 +6,18 @@ reports SIG UUIDs in full 128-bit form, and the original endswith() check
 silently matched nothing on macOS. These tests pin the fixed behaviour.
 """
 
+import csv
+from types import SimpleNamespace
+
 import pytest
 
-from scan_ble import service_uuid_matches
+from scan_ble import (
+    CSV_FIELDS,
+    build_device_record,
+    csv_row,
+    service_uuid_matches,
+    write_csv,
+)
 
 # How CoreBluetooth reports 0x180F / 0xFFF0 on macOS.
 BATTERY_128 = "0000180f-0000-1000-8000-00805f9b34fb"
@@ -68,3 +77,101 @@ class TestServiceUuidMatches:
     @pytest.mark.parametrize("needle", ["180f", "0x180f", "0000180f"])
     def test_equivalent_spellings_all_match(self, needle):
         assert service_uuid_matches(needle, [BATTERY_128]) is True
+
+
+class TestBuildDeviceRecord:
+    def _adv(self, **kw):
+        return SimpleNamespace(
+            local_name=kw.get("local_name"),
+            manufacturer_data=kw.get("manufacturer_data", {}),
+            service_data=kw.get("service_data", {}),
+            service_uuids=kw.get("service_uuids", []),
+            rssi=kw.get("rssi", -55),
+        )
+
+    def test_name_prefers_device_name(self):
+        dev = SimpleNamespace(name="Acme", address="AA:BB")
+        rec = build_device_record("AA:BB", dev, self._adv(local_name="ignored"))
+        assert rec["name"] == "Acme"
+
+    def test_name_falls_back_to_local_name_then_unnamed(self):
+        dev = SimpleNamespace(name=None, address="AA:BB")
+        assert build_device_record("AA:BB", dev, self._adv(local_name="Adv"))["name"] == "Adv"
+        assert build_device_record("AA:BB", dev, self._adv())["name"] == "(unnamed)"
+
+    def test_service_uuids_are_shortened(self):
+        dev = SimpleNamespace(name="x", address="AA:BB")
+        adv = self._adv(service_uuids=["0000180f-0000-1000-8000-00805f9b34fb"])
+        assert build_device_record("AA:BB", dev, adv)["service_uuids"] == ["180f"]
+
+    def test_rssi_is_passed_through(self):
+        dev = SimpleNamespace(name="x", address="AA:BB")
+        assert build_device_record("AA:BB", dev, self._adv(rssi=-70))["rssi"] == -70
+
+
+class TestCsvRow:
+    def _record(self, **kw):
+        base = {
+            "address": "AA:BB",
+            "name": "Acme",
+            "rssi": -55,
+            "local_name": "Acme",
+            "service_uuids": ["180f", "fff0"],
+            "manufacturer_data": "0x004C: 01 02",
+            "service_data": {"180f": "64", "fff0": "aa bb"},
+        }
+        base.update(kw)
+        return base
+
+    def test_service_uuids_are_joined(self):
+        assert csv_row(self._record())["service_uuids"] == "180f;fff0"
+
+    def test_service_data_is_rendered_as_pairs(self):
+        assert csv_row(self._record())["service_data"] == "180f=64;fff0=aa bb"
+
+    def test_missing_rssi_becomes_empty_cell(self):
+        assert csv_row(self._record(rssi=None))["rssi"] == ""
+
+    def test_missing_local_name_becomes_empty_cell(self):
+        assert csv_row(self._record(local_name=None))["local_name"] == ""
+
+    def test_scalar_fields_are_preserved(self):
+        row = csv_row(self._record())
+        assert row["address"] == "AA:BB"
+        assert row["manufacturer_data"] == "0x004C: 01 02"
+
+
+class TestWriteCsv:
+    def test_round_trip_has_header_and_one_row_per_device(self, tmp_path):
+        records = [
+            {
+                "address": "AA:BB",
+                "name": "Acme",
+                "rssi": -55,
+                "local_name": "Acme",
+                "service_uuids": ["180f"],
+                "manufacturer_data": "",
+                "service_data": {},
+            },
+            {
+                "address": "CC:DD",
+                "name": "(unnamed)",
+                "rssi": None,
+                "local_name": None,
+                "service_uuids": [],
+                "manufacturer_data": "",
+                "service_data": {},
+            },
+        ]
+        path = tmp_path / "scan.csv"
+        write_csv(str(path), records)
+
+        with open(path, newline="") as f:
+            reader = csv.DictReader(f)
+            assert reader.fieldnames == CSV_FIELDS
+            rows = list(reader)
+        assert len(rows) == 2
+        assert rows[0]["address"] == "AA:BB"
+        assert rows[0]["service_uuids"] == "180f"
+        assert rows[1]["rssi"] == ""
+        assert rows[1]["local_name"] == ""

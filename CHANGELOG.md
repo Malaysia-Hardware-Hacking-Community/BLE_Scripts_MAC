@@ -18,6 +18,10 @@ tagging releases.
 - `uuid_name()` in `ble_common`, a single wrapper over bleak's assigned-numbers
   table that returns a caller-supplied placeholder instead of the literal
   "Unknown" for a UUID with no known name.
+- `scan_ble` can write results as CSV with `--csv PATH`, one row per device,
+  alongside the existing `--write-to` JSON export. The two options can be given
+  together and share the same per-device fields (address, name, RSSI, local
+  name, advertised service UUIDs, manufacturer data, service data).
 
 ### Fixed
 
