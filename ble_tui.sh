@@ -40,7 +40,7 @@ if [[ -t 1 ]]; then
 else
   RESET=''; BOLD=''; DIM=''; CYAN=''; GREEN=''; YELLOW=''; RED=''; MAGENTA=''; BLUE=''; HL=''; EL=''
 fi
-VERSION="0.1.1"
+VERSION="0.1.2"
 MIN_W=40   # narrowest the panel is allowed to get
 MAX_W=72   # widest it will grow, so lines stay readable on a big terminal
 # Layout globals recomputed each frame by compute_layout, so the UI follows a

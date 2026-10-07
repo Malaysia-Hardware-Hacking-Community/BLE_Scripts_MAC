@@ -9,7 +9,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wamble"
-version = "0.1.1"
+version = "0.1.2"
 description = "Windows And Mac BLE: gatttool-style BLE tooling for macOS and Windows."
 readme = "README.md"
 requires-python = ">=3.11"

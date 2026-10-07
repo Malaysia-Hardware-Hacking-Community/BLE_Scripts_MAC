@@ -37,7 +37,7 @@ $TL = [char]0x256D; $TR = [char]0x256E; $BL = [char]0x2570; $BR = [char]0x256F
 $HZ = [char]0x2500; $VT = [char]0x2502; $LT = [char]0x251C; $RT = [char]0x2524
 $ARROW = [char]0x25BA; $UPTRI = [char]0x25B2; $DNTRI = [char]0x25BC
 
-$Version = '0.1.1'
+$Version = '0.1.2'
 $MinW = 40   # narrowest the panel is allowed to get
 $MaxW = 72   # widest it will grow, so lines stay readable on a big terminal
 # Layout globals recomputed each frame by Update-Layout, so the UI follows a

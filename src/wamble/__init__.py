@@ -7,4 +7,4 @@ bleak and rich. The individual tools live in this package (``wamble.scan``,
 authorized, own-device vulnerability demonstrations.
 """
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
