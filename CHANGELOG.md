@@ -17,9 +17,18 @@ tagging releases.
   unnamed device actually is: they decode the manufacturer company ID to a vendor
   name (a curated subset of the Bluetooth SIG list, e.g. Apple, Samsung, Google,
   Microsoft, Xiaomi), recognise iBeacon and Eddystone frames, and fill a
-  `(unnamed)` row with a derived identity such as `· Apple · iBeacon`. The
-  advertised-services column now names known UUIDs (16-bit and 128-bit alike),
-  and the manufacturer column names the vendor. New `wamble.identify` module.
+  `(unnamed)` row with a derived identity such as `· Apple · Nearby Info`. For
+  Apple devices it decodes the Continuity message type (Nearby, AirDrop, Handoff,
+  Find My, Proximity Pairing, ...), and for Proximity Pairing it names the
+  accessory model from a curated table (AirPods, AirPods Pro, Beats, ...). A
+  passive scan cannot reveal a phone's exact model (iPhone 15 vs 13); that is not
+  broadcast. The advertised-services column now names known UUIDs (16-bit and
+  128-bit alike), and the manufacturer column names the vendor. New
+  `wamble.identify` module.
+- `wamble-enum` now prints a prominent `Device:` line with the manufacturer and
+  model read from the Device Information Service (0x180A) when the device exposes
+  it, which is the reliable place a real model string lives (phones do not
+  expose it to an unpaired central).
 - `wamble-notify-log`: subscribe to a device's notify/indicate characteristics
   and log each notification to CSV with timestamps (`timestamp, elapsed,
   characteristic, handle, length, value_hex, text`). Subscribes to all

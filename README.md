@@ -134,9 +134,18 @@ the same per-device fields.
 A device that advertises no name is not left as a bare `(unnamed)`: WAMBLE reads
 its advertisement and shows what it is. The manufacturer company ID is decoded to
 a vendor name (a curated set of common vendors, e.g. `Apple`, `Samsung`,
-`Google`), iBeacon and Eddystone frames are recognised, and the row is labelled
-with that identity (for example `· Apple · iBeacon`). The advertised-services
-column names known UUIDs too. `wamble-watch` does the same in its live view.
+`Google`), and for Apple devices the Continuity message type is decoded too, so a
+row reads `· Apple · Nearby Info`, `· Apple · Find My`, `· Apple · AirDrop`, and
+so on. iBeacon and Eddystone frames are recognised, and a Proximity Pairing
+message names the accessory model (`AirPods`, `AirPods Pro`, `Beats ...`) from a
+curated table. The advertised-services column names known UUIDs too.
+`wamble-watch` does the same in its live view.
+
+A passive scan **cannot** reveal a phone's exact model (iPhone 15 vs 13, Galaxy
+S21 vs Pixel): that is deliberately not broadcast. The reliable place a model
+string lives is the Device Information Service, which you read by connecting, so
+`wamble-enum` prints a `Device:` line with the manufacturer and model when the
+device exposes it (many accessories and IoT devices do; phones do not).
 
 ### Watching advertisements live
 

@@ -40,6 +40,43 @@ COMPANY_IDS: dict[int, str] = {
 EDDYSTONE_UUID_16 = "feaa"
 APPLE_COMPANY_ID = 0x004C
 
+#: Apple "Continuity" message types (the first byte of the manufacturer
+#: payload). These say what an Apple device is *doing*, which is as specific as
+#: a passive scan gets: the exact model (iPhone 15 vs 13) is deliberately not
+#: broadcast. From the documented Continuity protocol.
+APPLE_MESSAGE_TYPES = {
+    0x02: "iBeacon",
+    0x05: "AirDrop",
+    0x07: "Proximity Pairing",
+    0x08: "Hey Siri",
+    0x09: "AirPlay",
+    0x0A: "AirPlay",
+    0x0B: "Magic Switch",
+    0x0C: "Handoff",
+    0x0D: "Tethering Target",
+    0x0E: "Tethering Source",
+    0x0F: "Nearby Action",
+    0x10: "Nearby Info",
+    0x12: "Find My",
+}
+
+#: Curated accessory model IDs from the Proximity Pairing (0x07) payload. Like
+#: the vendor table, this is a best-effort subset; an unknown ID is shown as its
+#: hex code rather than guessed at.
+APPLE_ACCESSORY_MODELS = {
+    0x0220: "AirPods",
+    0x0A20: "AirPods (2nd gen)",
+    0x1320: "AirPods (3rd gen)",
+    0x0E20: "AirPods Max",
+    0x0F20: "AirPods Pro",
+    0x1420: "AirPods Pro (2nd gen)",
+    0x0320: "Powerbeats Pro",
+    0x0520: "BeatsX",
+    0x0620: "Beats Solo3",
+    0x0920: "Beats Studio3",
+    0x1020: "Beats Flex",
+}
+
 _EDDYSTONE_FRAMES = {0x00: "Eddystone-UID", 0x10: "Eddystone-URL", 0x20: "Eddystone-TLM"}
 _URL_SCHEMES = {0x00: "http://www.", 0x01: "https://www.", 0x02: "http://", 0x03: "https://"}
 _URL_EXPANSIONS = {
@@ -124,6 +161,38 @@ def beacon_label(adv: Any) -> str | None:
     return eddystone["type"] if eddystone else None
 
 
+def apple_message_label(payload: bytes) -> str | None:
+    """Name the first Apple Continuity message in *payload*, or None if unknown."""
+    return APPLE_MESSAGE_TYPES.get(payload[0]) if payload else None
+
+
+def apple_accessory_model(payload: bytes) -> str | None:
+    """Accessory model from a Proximity Pairing (0x07) payload, or None.
+
+    Returns the curated name when the 2-byte model ID is known, otherwise
+    ``"model 0xXXXX"``; None when *payload* is not a proximity-pairing message.
+    """
+    if len(payload) < 5 or payload[0] != 0x07:
+        return None
+    model_id = int.from_bytes(payload[3:5], "big")
+    return APPLE_ACCESSORY_MODELS.get(model_id, f"model 0x{model_id:04X}")
+
+
+def apple_detail(adv: Any) -> str | None:
+    """Detail for Apple manufacturer data: the Continuity message, and for a
+    Proximity Pairing message the accessory model too. None if not Apple.
+    """
+    payload = (adv.manufacturer_data or {}).get(APPLE_COMPANY_ID)
+    if not payload:
+        return None
+    payload = bytes(payload)
+    label = apple_message_label(payload)
+    model = apple_accessory_model(payload)
+    if model:
+        return f"{label}: {model}" if label else model
+    return label
+
+
 def vendor_label(adv: Any) -> str | None:
     """The first recognised vendor name in *adv* manufacturer data, or None."""
     for company_id in adv.manufacturer_data or {}:
@@ -136,9 +205,14 @@ def vendor_label(adv: Any) -> str | None:
 def identify(adv: Any) -> str:
     """A short "what is this" label for *adv*: vendor and/or beacon, or "".
 
-    Examples: "Apple · iBeacon", "Samsung Electronics", "Eddystone-URL".
+    Examples: "Apple · Nearby Info", "Apple · Proximity Pairing: AirPods Pro",
+    "Samsung Electronics", "Eddystone-URL".
     """
-    parts = [p for p in (vendor_label(adv), beacon_label(adv)) if p]
+    # Apple's message detail (what it is doing, and the accessory model for
+    # proximity pairing) is richer than a bare beacon label; fall back to a
+    # beacon label for non-Apple advertisers (e.g. Eddystone).
+    detail = apple_detail(adv) or beacon_label(adv)
+    parts = [p for p in (vendor_label(adv), detail) if p]
     return " · ".join(dict.fromkeys(parts))
 
 

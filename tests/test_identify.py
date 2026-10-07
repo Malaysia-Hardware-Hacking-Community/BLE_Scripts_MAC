@@ -110,3 +110,48 @@ class TestDecodeManufacturer:
 
     def test_empty_when_no_manufacturer_data(self):
         assert decode_manufacturer(_adv()) == ""
+
+
+class TestAppleContinuity:
+    def _apple(self, payload: bytes):
+        return _adv(manufacturer_data={0x004C: payload})
+
+    def test_message_type_names(self):
+        from wamble.identify import apple_message_label
+
+        assert apple_message_label(bytes([0x10, 0x05])) == "Nearby Info"
+        assert apple_message_label(bytes([0x05, 0x12])) == "AirDrop"
+        assert apple_message_label(bytes([0x0C, 0x01])) == "Handoff"
+        assert apple_message_label(bytes([0x12, 0x00])) == "Find My"
+
+    def test_unknown_message_type_is_none(self):
+        from wamble.identify import apple_message_label
+
+        assert apple_message_label(bytes([0xFF, 0x00])) is None
+
+    def test_proximity_pairing_known_model(self):
+        from wamble.identify import apple_accessory_model
+
+        # 07 (proximity pairing), 19 (len), 01, 0F 20 -> AirPods Pro
+        assert apple_accessory_model(bytes([0x07, 0x19, 0x01, 0x0F, 0x20])) == "AirPods Pro"
+
+    def test_proximity_pairing_unknown_model_shows_hex(self):
+        from wamble.identify import apple_accessory_model
+
+        assert apple_accessory_model(bytes([0x07, 0x19, 0x01, 0x99, 0x99])) == "model 0x9999"
+
+    def test_non_proximity_payload_has_no_model(self):
+        from wamble.identify import apple_accessory_model
+
+        assert apple_accessory_model(bytes([0x10, 0x05, 0x00])) is None
+
+    def test_identify_nearby(self):
+        # The "nearby" shape seen live (10 02 01 00).
+        assert identify(self._apple(bytes.fromhex("10020100"))) == "Apple · Nearby Info"
+
+    def test_identify_airdrop(self):
+        assert identify(self._apple(bytes([0x05, 0x12, 0x00, 0x00]))) == "Apple · AirDrop"
+
+    def test_identify_airpods_pro(self):
+        adv = self._apple(bytes([0x07, 0x19, 0x01, 0x0F, 0x20, 0x00]))
+        assert identify(adv) == "Apple · Proximity Pairing: AirPods Pro"

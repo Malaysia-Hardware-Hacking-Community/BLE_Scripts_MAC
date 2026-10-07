@@ -17,6 +17,7 @@ from wamble.common import (
     show_value,
     uuid_name,
 )
+from wamble.device_info import read_identity
 
 console = Console()
 
@@ -99,6 +100,13 @@ async def main():  # noqa: C901
         if client is None:
             console.print("[red]Failed to connect.[/red]")
             return
+
+        # What the device reports itself to be, read from the Device Information
+        # Service. This is the reliable place a real model string lives (unlike a
+        # passive advertisement), so show it prominently when the device exposes it.
+        identity = await read_identity(client)
+        if identity:
+            console.print(f"[bold]Device:[/bold] {identity}")
 
         # Number of active notify/indicate subscriptions. Defined up front so the
         # end-of-run wait loop can reference it whether or not --notify was given.
