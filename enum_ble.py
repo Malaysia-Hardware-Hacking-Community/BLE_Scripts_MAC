@@ -2,7 +2,6 @@ import argparse
 import asyncio
 import traceback
 
-from bleak.exc import BleakGATTProtocolError
 from rich.console import Console
 
 from ble_common import (
@@ -10,8 +9,10 @@ from ble_common import (
     add_connection_args,
     connect,
     decode_bytes,
+    describe_gatt_error,
     fmt_bytes,
     format_properties,
+    is_gatt_refusal,
     short_uuid,
     show_value,
 )
@@ -119,7 +120,11 @@ async def main():  # noqa: C901
                     continue
                 all_chars.append(ch)
 
-        # Populate value rows for readable characteristics
+        # Read every readable characteristic and show its value. A device is free
+        # to refuse a read even on a characteristic that advertises the read
+        # property, usually because it wants pairing first. That refusal is a
+        # normal answer, not a tool fault, so it is reported in muted text with a
+        # plain reason rather than as an error.
         if args.readable or args.ctf_mode:
             for _svc, chars in builder.services:
                 for ch in chars.values():
@@ -128,26 +133,20 @@ async def main():  # noqa: C901
                         continue
                     if "read" not in ch.properties:
                         continue
+                    interesting = short_uuid(ch.uuid) in CTF_INTERESTING_UUIDS
+                    mark = " [bold magenta]<-- interesting[/bold magenta]" if interesting else ""
                     try:
                         value = await client.read_gatt_char(ch)
-                        text = decode_bytes(value)
-                        if text or args.ctf_mode:
-                            interesting = short_uuid(ch.uuid) in CTF_INTERESTING_UUIDS
-                            mark = (
-                                " [bold magenta]<-- interesting[/bold magenta]"
-                                if interesting
-                                else ""
-                            )
-                            console.print(
-                                f"\n[cyan]Read {ch.uuid} (handle {ch.handle}){mark}[/cyan]"
-                            )
-                            show_value(value, label="  ")
-                    except BleakGATTProtocolError as exc:
-                        code = getattr(exc, "code", None)
-                        code_str = f"0x{code:02X}" if isinstance(code, int) else "n/a"
-                        console.print(f"[red]GATT read failed (code {code_str}): {exc}[/red]")
                     except Exception as exc:
-                        console.print(f"[red]Read failed ({type(exc).__name__}): {exc!r}[/red]")
+                        reason = describe_gatt_error(exc)
+                        style = "dim" if is_gatt_refusal(exc) else "yellow"
+                        console.print(
+                            f"[{style}]Read {ch.uuid} (handle {ch.handle}){mark}: "
+                            f"{reason}[/{style}]"
+                        )
+                        continue
+                    console.print(f"\n[cyan]Read {ch.uuid} (handle {ch.handle}){mark}[/cyan]")
+                    show_value(value, label="  ")
 
         # Write support
         if args.writable:
@@ -188,7 +187,9 @@ async def main():  # noqa: C901
                             f"  [green]subscribed[/green] {ch.uuid} (handle {ch.handle}, {kind})"
                         )
                     except Exception as exc:
-                        console.print(f"  [red]failed {kind} on {ch.uuid}: {exc!r}[/red]")
+                        reason = describe_gatt_error(exc)
+                        style = "dim" if is_gatt_refusal(exc) else "yellow"
+                        console.print(f"  [{style}]cannot {kind} {ch.uuid}: {reason}[/{style}]")
 
             console.print(f"\n[dim]{count} subscription(s) active.[/dim]")
 
@@ -209,14 +210,17 @@ async def main():  # noqa: C901
                         continue
                     try:
                         value = await client.read_gatt_char(ch)
-                        text = decode_bytes(value)
-                        console.print(
-                            f"  [magenta]Read {ch.uuid} ({label}):[/magenta] {fmt_bytes(value)}"
-                        )
-                        if text and not text.startswith("("):
-                            found_flags.append((ch.uuid, text))
-                    except Exception as e:
-                        console.print(f"    [red]Read error: {e!r}[/red]")
+                    except Exception as exc:
+                        reason = describe_gatt_error(exc)
+                        style = "dim" if is_gatt_refusal(exc) else "yellow"
+                        console.print(f"  [{style}]Read {ch.uuid} ({label}): {reason}[/{style}]")
+                        continue
+                    text = decode_bytes(value)
+                    console.print(
+                        f"  [magenta]Read {ch.uuid} ({label}):[/magenta] {fmt_bytes(value)}"
+                    )
+                    if text and not text.startswith("("):
+                        found_flags.append((ch.uuid, text))
 
             if found_flags:
                 console.print(

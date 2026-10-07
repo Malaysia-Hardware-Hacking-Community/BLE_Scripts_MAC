@@ -17,7 +17,7 @@ except ImportError:  # pragma: no cover - Windows
 # instead of raising SIGINT. Because the prompt runs on a background thread (so
 # keepalive can ping while we wait for a command), that input() call then never
 # returns on Ctrl-C: the REPL cannot be interrupted and the terminal is left in
-# raw mode — the "stuck, can't type anything" hang. Without readline, input()
+# raw mode, the "stuck, can't type anything" hang. Without readline, input()
 # uses the kernel's canonical line discipline, where Ctrl-C raises SIGINT
 # normally and the terminal is never left raw. The only cost is no in-line
 # history/editing, an acceptable trade for a prompt that can always be
@@ -74,7 +74,9 @@ from rich.console import Console
 from ble_common import (
     add_connection_args,
     connect,
+    describe_gatt_error,
     find_characteristic,
+    is_gatt_refusal,
     print_characteristics_table,
     print_descriptors_table,
     print_gatt_tables,
@@ -100,6 +102,17 @@ def _not_found_hint(client, token: str) -> str:
 
 
 console = Console()
+
+
+def _print_gatt_error(exc: Exception, action: str) -> None:
+    """Print a GATT read, write, or subscribe failure as a plain, calm reason.
+
+    A device declining a request (it wants pairing, or the attribute is locked)
+    is shown in muted text, since it is a normal answer. Anything else is a real
+    fault and shown in red.
+    """
+    style = "dim" if is_gatt_refusal(exc) else "red"
+    console.print(f"[{style}]Could not {action}: {describe_gatt_error(exc)}[/{style}]")
 
 
 def _notification_callback(sender, data) -> None:
@@ -268,14 +281,14 @@ async def _dispatch(client, parts, subscriptions, args) -> str | None:  # noqa: 
                 await client.disconnect()
             except Exception:
                 pass
-        console.print("[yellow]Reconnecting…[/yellow]")
+        console.print("[yellow]Reconnecting...[/yellow]")
         await try_reconnect(client, args.connect_timeout, subscriptions)
         return None
 
     # The link can drop between commands; reconnect once before using a dead
     # handle rather than failing with "Service Discovery has not been performed".
     if not client.is_connected:
-        console.print("[yellow]Device disconnected — reconnecting…[/yellow]")
+        console.print("[yellow]Device disconnected, reconnecting...[/yellow]")
         if not await try_reconnect(client, args.connect_timeout, subscriptions):
             console.print("[red]Ending session.[/red]")
             return "break"
@@ -302,7 +315,7 @@ async def _dispatch(client, parts, subscriptions, args) -> str | None:  # noqa: 
             try:
                 show_value(await client.read_gatt_char(char))
             except Exception as exc:
-                console.print(f"[red]{type(exc).__name__}: {exc!r}[/red]")
+                _print_gatt_error(exc, "read that characteristic")
         return None
 
     if cmd in {"write-req", "write-cmd"} and len(parts) == 3:
@@ -321,8 +334,10 @@ async def _dispatch(client, parts, subscriptions, args) -> str | None:  # noqa: 
             payload = bytes.fromhex(parts[2])
             await client.write_gatt_char(char, payload, response=response)
             console.print(f"[green]Sent {len(payload)} byte(s).[/green]")
+        except ValueError:
+            console.print("[red]Payload must be hex, for example 01ff.[/red]")
         except Exception as exc:
-            console.print(f"[red]{type(exc).__name__}: {exc!r}[/red]")
+            _print_gatt_error(exc, "write that characteristic")
         return None
 
     if cmd in {"notify", "indicate", "unnotify"} and len(parts) == 2:
@@ -356,7 +371,7 @@ async def _dispatch(client, parts, subscriptions, args) -> str | None:  # noqa: 
                 "[dim](re-armed automatically after reconnects)[/dim]"
             )
         except Exception as exc:
-            console.print(f"[red]{type(exc).__name__}: {exc!r}[/red]")
+            _print_gatt_error(exc, f"subscribe to {acceptable}")
         return None
 
     console.print("[yellow]Invalid command or arguments.[/yellow]")

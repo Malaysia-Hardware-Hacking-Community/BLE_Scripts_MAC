@@ -65,7 +65,7 @@ async def main() -> None:
 
         mtu = get_mtu(client)
 
-        table = Table(title=f"ATT MTU — {args.device}", header_style="bold cyan")
+        table = Table(title=f"ATT MTU: {args.device}", header_style="bold cyan")
         table.add_column("Property", style="green")
         table.add_column("Value", justify="right")
         table.add_row("Negotiated MTU", f"{mtu} bytes")

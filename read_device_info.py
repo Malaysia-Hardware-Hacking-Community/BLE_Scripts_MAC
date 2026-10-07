@@ -4,7 +4,13 @@ import asyncio
 from rich.console import Console
 from rich.table import Table
 
-from ble_common import add_connection_args, connect, decode_bytes, fmt_bytes
+from ble_common import (
+    add_connection_args,
+    connect,
+    decode_bytes,
+    describe_gatt_error,
+    fmt_bytes,
+)
 
 console = Console()
 
@@ -64,7 +70,7 @@ async def main():
                 raw = await client.read_gatt_char(char)
                 table.add_row(label, decode_bytes(raw) or "(binary)", fmt_bytes(raw))
             except Exception as exc:
-                table.add_row(label, f"{type(exc).__name__}: {exc}", "—")
+                table.add_row(label, describe_gatt_error(exc), "—")
 
         console.print(table)
     except Exception as exc:

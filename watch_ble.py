@@ -79,7 +79,7 @@ async def main() -> None:
 
     def render():
         if not latest:
-            return "[yellow]Waiting for advertisements…[/yellow]"
+            return "[yellow]Waiting for advertisements...[/yellow]"
         return build_table(latest)
 
     scanner = BleakScanner(detection_callback=detection_callback)

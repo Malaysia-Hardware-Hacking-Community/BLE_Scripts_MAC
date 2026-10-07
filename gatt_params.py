@@ -38,7 +38,7 @@ from bleak import BleakClient, normalize_uuid_str
 from rich.console import Console
 from rich.table import Table
 
-from ble_common import add_connection_args, connect, short_uuid
+from ble_common import add_connection_args, connect, describe_gatt_error, short_uuid
 
 console = Console()
 
@@ -221,8 +221,8 @@ async def main() -> None:
             console.print(
                 "[yellow]This device does not expose the optional Peripheral "
                 "Preferred Connection Parameters characteristic (0x2A04).[/yellow]\n"
-                "[dim]That is normal — many peripherals (Govee LED controllers "
-                "included) omit it. There are no preferred parameters to read, and "
+                "[dim]That is normal. Many peripherals, including most RGB LED "
+                "controllers, omit it. There are no preferred parameters to read, and "
                 "nothing to set; the OS negotiates the connection parameters "
                 "itself and macOS does not expose the result.[/dim]"
             )
@@ -237,7 +237,9 @@ async def main() -> None:
             try:
                 raw = await client.read_gatt_char(char)
             except Exception as exc:
-                console.print(f"[red]Read failed: {exc!r}[/red]")
+                console.print(
+                    f"[yellow]Could not read the parameters: {describe_gatt_error(exc)}[/yellow]"
+                )
                 sys.exit(2)
             params = unpack_range(raw)
             if params is None:
@@ -260,7 +262,10 @@ async def main() -> None:
         try:
             await client.write_gatt_char(char, payload, response=True)
         except Exception as exc:
-            console.print(f"[red]Write to characteristic {char.handle} failed: {exc!r}[/red]")
+            console.print(
+                f"[yellow]Write to handle {char.handle} not accepted: "
+                f"{describe_gatt_error(exc)}[/yellow]"
+            )
             console.print(
                 "[dim]PPCP is read-only on most peripherals; this is expected. A "
                 "central cannot set connection parameters via GATT.[/dim]"

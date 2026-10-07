@@ -48,10 +48,10 @@ class TestPersistenceVerdict:
 class TestStateRoundTrip:
     def test_save_then_load_returns_same_dict(self, tmp_path):
         p = tmp_path / "s.json"
-        state = {"device": "Govee", "write_hex": "33 01 01", "original_hex": None}
+        state = {"device": "GBK_H619A", "write_hex": "33 01 01", "original_hex": None}
         save_state(p, state)
         assert load_state(p) == state
 
     def test_state_path_is_filesystem_safe(self):
-        p = state_path("Govee H61E0 (50)")
-        assert p.name == "persistence-state-Govee_H61E0__50_.json"
+        p = state_path("MOLUS G60 (50)")
+        assert p.name == "persistence-state-MOLUS_G60__50_.json"

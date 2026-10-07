@@ -27,6 +27,20 @@ tagging releases.
 
 ### Fixed
 
+- A read or write that a device refuses is now reported as a plain reason
+  instead of a raw protocol error. When a device returns an ATT error (for
+  example a TV that answers a read with code `0xF7` because it wants pairing
+  first), the tools print "device declined, likely needs pairing (0xF7)" in
+  muted text rather than a red "GATT read failed" with an exception dump. This
+  covers `enum_ble`, `read_device_info`, `gatt_params`, `gatt_cli`, `ble_ctf`,
+  and the recon scripts in `BLE-Exploits`.
+- `ble_ctf` no longer lets a refused read or write escape as a Python traceback;
+  it prints the plain reason and disconnects cleanly.
+- A failed connection now explains itself. A timeout says so and names the
+  likely cause instead of printing `TimeoutError()`.
+- `ble_posture_scan` now counts a refused read by its ATT error code, so it
+  recognises the vendor "needs pairing" codes (such as macOS reporting `0xF7`)
+  that a text match on the message would miss.
 - `gatt_cli` no longer hangs on Ctrl-C and no longer leaves the terminal in an
   unusable state. The prompt now uses the canonical line discipline so a typed
   Ctrl-C raises an interrupt, and terminal settings are restored on exit.

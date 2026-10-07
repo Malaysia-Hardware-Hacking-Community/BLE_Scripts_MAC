@@ -75,6 +75,87 @@ def format_properties(props, empty: str = "—") -> str:
     return ", ".join(ordered) if ordered else empty
 
 
+#: Standard Bluetooth ATT error codes (Core Spec Vol 3, Part F, 3.4.1.1) that a
+#: peripheral returns to reject a request. Codes outside this table, including the
+#: 0x80-0x9F application range and the 0xE0-0xFF profile range, are vendor defined;
+#: a locked-down consumer device commonly returns one of those to mean the same
+#: thing as "authentication required", that is, pair with me first.
+ATT_ERROR_NAMES = {
+    0x01: "invalid handle",
+    0x02: "read not permitted",
+    0x03: "write not permitted",
+    0x04: "invalid request",
+    0x05: "authentication required",
+    0x06: "request not supported",
+    0x07: "invalid offset",
+    0x08: "authorization required",
+    0x09: "prepare queue full",
+    0x0A: "attribute not found",
+    0x0B: "attribute not long",
+    0x0C: "encryption key size too short",
+    0x0D: "invalid value length",
+    0x0E: "unlikely error",
+    0x0F: "encryption required",
+    0x10: "unsupported group type",
+    0x11: "insufficient resources",
+    0x12: "database out of sync",
+    0x13: "value not allowed",
+}
+
+#: Standard ATT codes that mean the device understood the request and chose to
+#: refuse it on permission or security grounds, rather than a transport or tooling
+#: fault. The vendor ranges above are treated the same way by :func:`is_gatt_refusal`.
+_ATT_REFUSAL_CODES = frozenset({0x02, 0x03, 0x05, 0x08, 0x0C, 0x0F})
+
+
+def gatt_error_code(exc: BaseException) -> int | None:
+    """Return the ATT error code carried by a bleak GATT exception, or None.
+
+    bleak exposes the code as ``exc.code`` on most backends; on some it only
+    appears as the first element of ``exc.args``. This checks both.
+    """
+    code = getattr(exc, "code", None)
+    if isinstance(code, int):
+        return code
+    args = getattr(exc, "args", ())
+    if args and isinstance(args[0], int):
+        return args[0]
+    return None
+
+
+def is_gatt_refusal(exc: BaseException) -> bool:
+    """True when *exc* is the device deliberately refusing a read or write.
+
+    A refusal is a normal answer from a device that wants pairing or has a
+    characteristic locked down, so callers report it as information rather than as
+    a tool error. Covers the standard permission and security ATT codes and the
+    vendor code ranges that consumer devices return to mean the same thing.
+    """
+    code = gatt_error_code(exc)
+    if code is None:
+        return False
+    return code in _ATT_REFUSAL_CODES or 0x80 <= code <= 0x9F or 0xE0 <= code <= 0xFF
+
+
+def describe_gatt_error(exc: BaseException) -> str:
+    """Render a GATT read or write failure as a short, plain reason.
+
+    Standard ATT codes become their spec name. Vendor codes (the 0x80-0x9F and
+    0xE0-0xFF ranges) are reported as the device declining the request, which on a
+    consumer device almost always means it wants pairing or a vendor handshake
+    first. Anything without a code falls back to the exception's own message.
+    """
+    code = gatt_error_code(exc)
+    if code is None:
+        return str(exc) or type(exc).__name__
+    name = ATT_ERROR_NAMES.get(code)
+    if name is not None:
+        return f"{name} (0x{code:02X})"
+    if 0x80 <= code <= 0x9F or 0xE0 <= code <= 0xFF:
+        return f"device declined, likely needs pairing (0x{code:02X})"
+    return f"device declined (0x{code:02X})"
+
+
 def uuid16_from_128(uuid_128: str) -> str | None:
     """Reduce a 128-bit UUID to its 16-bit form, if it is a Bluetooth SIG base UUID.
 
@@ -123,7 +204,7 @@ async def find_device(
         On Windows (and Linux) ``BLEDevice.address`` is the peripheral's real
         Bluetooth MAC, so either the address or a name substring works. On macOS
         it is a CoreBluetooth-generated UUID scoped to this Mac, not the real
-        MAC, and it changes between reboots — there, prefer a name substring.
+        MAC, and it changes between reboots, so prefer a name substring there.
     """
     # Strip surrounding whitespace: an address pasted from a wrapped table cell
     # or a shell prompt often carries a leading/trailing space or newline, which
@@ -178,8 +259,16 @@ async def connect(
             return None
         console.print("[green]Connected.[/green]")
         return client
+    except TimeoutError:
+        console.print(
+            f"[red]Connection timed out after {connect_timeout:g}s. The device may be "
+            f"out of range, already connected elsewhere, or not accepting connections.[/red]"
+        )
+        return None
     except Exception as exc:
-        console.print(f"[red]Connection failed: {exc!r}[/red]")
+        # bleak error messages are usually descriptive; fall back to the type name
+        # for the rare one that stringifies to empty.
+        console.print(f"[red]Connection failed: {exc or type(exc).__name__}[/red]")
         return None
 
 
@@ -452,18 +541,22 @@ def parse_advertisement_data(adv: Any) -> dict:
 
 
 __all__ = [
+    "ATT_ERROR_NAMES",
     "BASE_UUID_SUFFIX",
     "DISPLAYED_PROPERTIES",
     "GATTTableBuilder",
     "add_connection_args",
     "connect",
     "decode_bytes",
+    "describe_gatt_error",
     "enumerate_services",
     "find_characteristic",
     "find_descriptor",
     "find_device",
     "fmt_bytes",
     "format_properties",
+    "gatt_error_code",
+    "is_gatt_refusal",
     "parse_advertisement_data",
     "print_characteristics_table",
     "print_descriptors_table",

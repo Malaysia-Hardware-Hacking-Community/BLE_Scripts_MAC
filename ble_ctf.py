@@ -1,4 +1,4 @@
-"""ble_ctf.py — a gatttool-style, scriptable BLE CTF client for macOS.
+"""ble_ctf.py: a gatttool-style, scriptable BLE CTF client for macOS.
 
 The CyberDSA BLE CTF walkthrough (`ble_ctf_commands.txt`) is written for Linux
 `gratttool`/`gatttool`: handle-based reads and writes, write-then-listen for
@@ -19,12 +19,12 @@ operation:
 
 Coverage on macOS is 16/20 (verified live against the device). Four flags are
 blocked by CoreBluetooth itself and need a Linux/BlueZ host with gatttool/btmgmt:
-  * flag 15 — set a local BD address (gatttool --bdaddr): no CoreBluetooth API.
-  * flag 16 — ATT MTU exactly 444 (gatttool --mtu): macOS auto-negotiates (500
-    here) and cannot set it; `mtu` reports what you got.
-  * flag 18 — "hidden" notification on 0xff15: the characteristic has no notify
+  * flag 15 sets a local BD address (gatttool --bdaddr): no CoreBluetooth API.
+  * flag 16 wants the ATT MTU exactly 444 (gatttool --mtu): macOS auto-negotiates
+    (500 here) and cannot set it; `mtu` reports what you got.
+  * flag 18 is a "hidden" notification on 0xff15: the characteristic has no notify
     property, so CoreBluetooth refuses to subscribe (CBATTError Code 6).
-  * flag 19 — notification half on 0xff16: declares notify but has no CCCD
+  * flag 19 is a notification half on 0xff16: declares notify but has no CCCD
     (0x2902), so CoreBluetooth cannot enable notifications (CBATTError Code 10).
 Flags whose characteristics have a real notify+CCCD setup (0xff0c/0e/0f/11,
 i.e. flags 11-14) work fine. See the README for the full breakdown.
@@ -36,7 +36,14 @@ Default target name is the CTF device ("M0DUL0CTF"); override with -b/--device
 import argparse
 import asyncio
 
-from ble_common import add_connection_args, connect, console, decode_bytes, fmt_bytes
+from ble_common import (
+    add_connection_args,
+    connect,
+    console,
+    decode_bytes,
+    describe_gatt_error,
+    fmt_bytes,
+)
 from ble_gatt import as_handle, read_target, resolve_target
 
 DEFAULT_DEVICE = "M0DUL0CTF"
@@ -55,7 +62,7 @@ def _resolve(client, handle_or_uuid: str):
     """Resolve a characteristic/descriptor by UUID or handle, macOS-aware.
 
     macOS CoreBluetooth does not expose real ATT handles; bleak synthesizes a
-    handle that is the characteristic *declaration* handle — one below the
+    handle that is the characteristic *declaration* handle, one below the
     gatttool *value* handle the Linux CTF walkthrough uses (confirmed on the
     live device: ff01 is 0x29 here vs 0x2a there). So when a handle does not
     resolve, retry one lower, letting the walkthrough's value handles work
@@ -156,7 +163,7 @@ async def op_listen(
 
 def op_mtu_report(mtu: int) -> None:
     console.print(f"Negotiated ATT MTU: [bold]{mtu}[/bold] bytes (payload {max(0, mtu - 3)}).")
-    # Flag 16 requires the negotiated MTU to be EXACTLY 444 — the device returns
+    # Flag 16 requires the negotiated MTU to be EXACTLY 444; the device returns
     # a hint ("Set your connection MTU to 444") for any other value. macOS
     # CoreBluetooth negotiates the MTU itself and exposes no way to set it, so
     # hitting exactly 444 is impossible here regardless of what we got.
@@ -165,8 +172,8 @@ def op_mtu_report(mtu: int) -> None:
     else:
         console.print(
             f"[yellow]Flag 16 needs the MTU to be exactly {FLAG16_REQUIRED_MTU}; this is {mtu}. "
-            "macOS auto-negotiates the MTU and cannot set it, so flag 16 is blocked here — "
-            "use a Linux/BlueZ host with `gatttool --mtu 444`.[/yellow]"
+            "macOS auto-negotiates the MTU and cannot set it, so flag 16 is blocked here. "
+            "Use a Linux/BlueZ host with `gatttool --mtu 444`.[/yellow]"
         )
 
 
@@ -249,6 +256,15 @@ async def main() -> None:
             await op_listen(client, args.handle, trigger, args.secs, response=not args.cmd)
         elif args.op == "readloop":
             await op_readloop(client, args.handle, args.count, args.show_every)
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        # Let a real interrupt propagate to the __main__ guard; the finally below
+        # still disconnects on the way out.
+        raise
+    except Exception as exc:
+        # A device refusing a read or write (it wants pairing, or the handle is
+        # locked) is a normal answer, so report it plainly instead of letting a
+        # traceback escape.
+        console.print(f"[yellow]{describe_gatt_error(exc)}[/yellow]")
     finally:
         if client.is_connected:
             await client.disconnect()
