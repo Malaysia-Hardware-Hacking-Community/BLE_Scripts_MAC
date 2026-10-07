@@ -15,6 +15,7 @@ from ble_common import (
     is_gatt_refusal,
     short_uuid,
     show_value,
+    uuid_name,
 )
 
 console = Console()
@@ -242,7 +243,12 @@ async def main():  # noqa: C901
                     continue
 
                 props_str = format_properties(ch.properties)
-                console.print(f"  [cyan]UUID {ch.uuid}[/cyan] handle={ch.handle} props={props_str}")
+                name = uuid_name(ch.uuid)
+                name_label = f" ({name})" if name else ""
+                console.print(
+                    f"  [cyan]UUID {ch.uuid}[/cyan]{name_label} "
+                    f"handle={ch.handle} props={props_str}"
+                )
 
                 # Describe descriptors if any. Descriptors need read_gatt_descriptor,
                 # not read_gatt_char.
@@ -250,8 +256,10 @@ async def main():  # noqa: C901
                 if descrs:
                     console.print(f"    [dim]Descriptors ({len(descrs)}):[/dim]")
                     for d in descrs[:5]:  # show first 5
+                        d_name = uuid_name(d.uuid)
+                        d_label = f" ({d_name})" if d_name else ""
                         console.print(
-                            f"      [dim]  {short_uuid(d.uuid)} (handle {d.handle})[/dim]"
+                            f"      [dim]  {short_uuid(d.uuid)}{d_label} (handle {d.handle})[/dim]"
                         )
                     if len(descrs) > 5:
                         console.print(f"      [dim]... and {len(descrs) - 5} more[/dim]")

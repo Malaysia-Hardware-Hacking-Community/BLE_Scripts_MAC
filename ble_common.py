@@ -4,6 +4,7 @@ from typing import Any
 
 from bleak import BleakClient, BleakScanner, normalize_uuid_str
 from bleak.backends.device import BLEDevice
+from bleak.uuids import uuidstr_to_str
 from rich.console import Console
 from rich.table import Table
 
@@ -184,6 +185,30 @@ def short_uuid(uuid_128: str) -> str:
     """Render a UUID compactly: '180f' for SIG base UUIDs, else the full string."""
     hex_16 = uuid16_from_128(uuid_128)
     return hex_16 if hex_16 is not None else str(uuid_128)
+
+
+def uuid_name(uuid: Any, default: str = "") -> str:
+    """Human-readable Bluetooth SIG/vendor name for a UUID, or *default*.
+
+    Wraps bleak's assigned-numbers table (the same one that backs a
+    characteristic's ``.description``). bleak returns the literal "Unknown" for a
+    UUID it has no name for; this returns *default* instead, so a caller can show
+    its own placeholder rather than the word "Unknown".
+
+    >>> uuid_name("180f")
+    'Battery Service'
+    >>> uuid_name("2902")
+    'Client Characteristic Configuration'
+    >>> uuid_name("12345678-1234-1234-1234-1234567890ab")
+    ''
+    >>> uuid_name("12345678-1234-1234-1234-1234567890ab", "—")
+    '—'
+    """
+    try:
+        name = uuidstr_to_str(str(uuid))
+    except (AttributeError, TypeError, ValueError):
+        return default
+    return default if not name or name == "Unknown" else name
 
 
 async def find_device(
@@ -415,7 +440,7 @@ class GATTTableBuilder:
                 table.add_row(
                     short_uuid(_svc.uuid),
                     short_uuid(ch.uuid),
-                    ch.description or "—",
+                    uuid_name(ch.uuid, "—"),
                     str(ch.handle),
                     format_properties(ch.properties),
                 )
@@ -437,7 +462,7 @@ def print_services_table(client: BleakClient) -> None:
         table.add_row(
             short_uuid(service.uuid),
             str(getattr(service, "handle", "—")),
-            getattr(service, "description", None) or "—",
+            uuid_name(service.uuid, "—"),
             str(len(service.characteristics)),
         )
         count += 1
@@ -459,13 +484,19 @@ def print_descriptors_table(client: BleakClient) -> None:
     desc_table = Table(title="GATT Descriptors", header_style="bold cyan")
     desc_table.add_column("Characteristic", style="cyan", no_wrap=True)
     desc_table.add_column("Descriptor", style="magenta", no_wrap=True)
+    desc_table.add_column("Name", style="blue", overflow="fold")
     desc_table.add_column("Handle", justify="right", style="dim")
 
     rows = 0
     for _svc, chars in enumerate_services(client):
         for ch in chars.values():
             for desc in ch.descriptors:
-                desc_table.add_row(short_uuid(ch.uuid), short_uuid(desc.uuid), str(desc.handle))
+                desc_table.add_row(
+                    short_uuid(ch.uuid),
+                    short_uuid(desc.uuid),
+                    uuid_name(desc.uuid, "—"),
+                    str(desc.handle),
+                )
                 rows += 1
 
     if rows:
@@ -566,5 +597,6 @@ __all__ = [
     "short_uuid",
     "show_value",
     "uuid16_from_128",
+    "uuid_name",
     "write_gatt_char",
 ]

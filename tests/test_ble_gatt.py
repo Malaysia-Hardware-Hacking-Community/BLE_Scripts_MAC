@@ -314,3 +314,40 @@ class TestReadAndWriteTarget:
             b"\x01\x00",
             None,
         )
+
+
+class TestUuidName:
+    def test_known_16_bit_service(self):
+        from ble_common import uuid_name
+
+        assert uuid_name("180f") == "Battery Service"
+
+    def test_known_16_bit_characteristic(self):
+        from ble_common import uuid_name
+
+        assert uuid_name("2a19") == "Battery Level"
+
+    def test_known_descriptor(self):
+        from ble_common import uuid_name
+
+        assert uuid_name("2902") == "Client Characteristic Configuration"
+
+    def test_full_128_bit_sig_uuid_resolves(self):
+        from ble_common import uuid_name
+
+        assert uuid_name("0000180f-0000-1000-8000-00805f9b34fb") == "Battery Service"
+
+    def test_unknown_uuid_returns_empty_by_default(self):
+        from ble_common import uuid_name
+
+        assert uuid_name("12345678-1234-1234-1234-1234567890ab") == ""
+
+    def test_unknown_uuid_returns_the_given_placeholder(self):
+        from ble_common import uuid_name
+
+        assert uuid_name("12345678-1234-1234-1234-1234567890ab", "—") == "—"
+
+    def test_non_string_input_falls_back_to_default(self):
+        from ble_common import uuid_name
+
+        assert uuid_name(None, "—") == "—"

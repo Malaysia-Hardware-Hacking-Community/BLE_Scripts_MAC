@@ -16,6 +16,8 @@ from ble_common import (
     connect,
     enumerate_services,
     format_properties,
+    short_uuid,
+    uuid_name,
 )
 
 console = Console()
@@ -57,15 +59,21 @@ async def find_by_uuid(client: BleakClient, uuid_substring: str, target: str = "
     noun = "Characteristics" if target == "char" else "Descriptors"
     table = Table(title=f"{noun} matching '{uuid_substring}'")
     table.add_column("UUID", style="cyan", no_wrap=True)
+    table.add_column("Name", style="blue", overflow="fold")
     table.add_column("Handle", justify="right", style="dim")
     if target == "char":
         table.add_column("Properties", justify="center", style="green")
 
     for item in found:
         if target == "char":
-            table.add_row(str(item.uuid), str(item.handle), format_properties(item.properties))
+            table.add_row(
+                short_uuid(item.uuid),
+                uuid_name(item.uuid, "—"),
+                str(item.handle),
+                format_properties(item.properties),
+            )
         else:
-            table.add_row(str(item.uuid), str(item.handle))
+            table.add_row(short_uuid(item.uuid), uuid_name(item.uuid, "—"), str(item.handle))
 
     console.print(table)
 
