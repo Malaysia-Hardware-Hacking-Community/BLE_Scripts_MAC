@@ -5,9 +5,15 @@ All notable changes to WAMBLE are recorded here. The format is based on
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once it starts
 tagging releases.
 
-## [Unreleased]
+## [0.1.0] - 2026-10-07
 
 ### Added
+
+- A wombat mascot and the toolkit version (`v0.1.0`) in the banner of both menu
+  front-ends (`ble_tui.sh` and `ble_tui.ps1`).
+- The menu now centers itself and scales its panel width to the terminal, and
+  drops the mascot for a one-line banner on a small window, so it reads well from
+  narrow to wide terminals.
 
 - GitHub Actions CI that runs the test suite on Linux, macOS, and Windows across
   Python 3.11 to 3.13, plus a strict quality job: ruff (redundancy,

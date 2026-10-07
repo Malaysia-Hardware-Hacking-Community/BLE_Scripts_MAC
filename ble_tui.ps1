@@ -33,24 +33,73 @@ elseif (Get-Command py -ErrorAction SilentlyContinue) { $Py = 'py' }
 # --- box-drawing glyphs (PS 5.1 + 7 compatible) ----------------------------
 $TL = [char]0x256D; $TR = [char]0x256E; $BL = [char]0x2570; $BR = [char]0x256F
 $HZ = [char]0x2500; $VT = [char]0x2502; $LT = [char]0x251C; $RT = [char]0x2524
-$ARROW = [char]0x25BA
-$W = 66
+$ARROW = [char]0x25BA; $UPTRI = [char]0x25B2; $DNTRI = [char]0x25BC
+
+$Version = '0.1.0'
+$MinW = 40   # narrowest the panel is allowed to get
+$MaxW = 72   # widest it will grow, so lines stay readable on a big terminal
+# Layout globals recomputed each frame by Update-Layout, so the UI follows a
+# terminal resize: Cols/Lines hold the terminal size, W the panel width, Pad the
+# left margin that centers the panel, and Compact/BannerH the banner size.
+$Cols = 80; $Lines = 24; $W = $MaxW; $Pad = ''; $Compact = $false; $BannerH = 9
+
+# Recompute the responsive layout from the current console size.
+function Update-Layout {
+    try { $script:Cols = [Console]::WindowWidth } catch { $script:Cols = 80 }
+    try { $script:Lines = [Console]::WindowHeight } catch { $script:Lines = 24 }
+    if ($script:Cols -lt 1) { $script:Cols = 80 }
+    if ($script:Lines -lt 1) { $script:Lines = 24 }
+    $w = $MaxW
+    if ($w -gt $script:Cols - 2) { $w = $script:Cols - 2 }
+    if ($w -lt $MinW) { $w = $MinW }
+    if ($w -gt $script:Cols) { $w = $script:Cols }   # pathologically narrow terminal
+    $script:W = $w
+    $lp = [int](($script:Cols - $w) / 2)
+    if ($lp -lt 0) { $lp = 0 }
+    $script:Pad = ' ' * $lp
+    # Drop the wombat on a short or narrow terminal so the list keeps its room.
+    if ($script:Lines -ge 20 -and $script:Cols -ge 24) { $script:Compact = $false; $script:BannerH = 9 }
+    else { $script:Compact = $true; $script:BannerH = 2 }
+}
+
+# Print a line centered across the whole console width.
+function Write-Centered {
+    param([string]$Text, [System.ConsoleColor]$Color = [System.ConsoleColor]::Gray)
+    $lp = [int](($script:Cols - $Text.Length) / 2)
+    if ($lp -lt 0) { $lp = 0 }
+    Write-Host ((' ' * $lp) + $Text) -ForegroundColor $Color
+}
 
 function Show-Banner {
     Clear-Host
-    Write-Host "  WAMBLE  - Windows And Mac BLE toolkit and PoCs`n" -ForegroundColor Cyan
+    Update-Layout
+    if ($script:Compact) {
+        Write-Centered "WAMBLE v$Version  Windows And Mac BLE" Cyan
+        Write-Host ''
+        return
+    }
+    # The wombat mascot, centered as a block so its shape is preserved. Drawn
+    # squat and broad with a big nose and small rounded ears, the way a wombat is.
+    $art = @('   __      __   ', '  /  \____/  \  ', ' / o        o \ ', '(     (__)     )', ' \            / ', "  '-||----||-'  ")
+    $artW = 16
+    $alp = [int](($script:Cols - $artW) / 2); if ($alp -lt 0) { $alp = 0 }
+    $ap = ' ' * $alp
+    foreach ($line in $art) { Write-Host ($ap + $line) -ForegroundColor Cyan }
+    Write-Centered "WAMBLE  v$Version" Cyan
+    Write-Centered 'Windows And Mac BLE toolkit and PoCs' DarkGray
+    Write-Host ''
 }
 
 function Write-Edge($left, $right) {
-    Write-Host ([string]$left + ([string]$HZ * ($W - 2)) + [string]$right) -ForegroundColor Cyan
+    Write-Host ($script:Pad + [string]$left + ([string]$HZ * ($script:W - 2)) + [string]$right) -ForegroundColor Cyan
 }
 
 function Write-Row {
     param([string]$Text, [string]$Style = 'normal')
     $inner = ' ' + $Text
-    if ($inner.Length -gt ($W - 2)) { $inner = $inner.Substring(0, $W - 2) }
-    else { $inner = $inner.PadRight($W - 2) }
-    Write-Host -NoNewline ([string]$VT) -ForegroundColor Cyan
+    if ($inner.Length -gt ($script:W - 2)) { $inner = $inner.Substring(0, $script:W - 2) }
+    else { $inner = $inner.PadRight($script:W - 2) }
+    Write-Host -NoNewline ($script:Pad + [string]$VT) -ForegroundColor Cyan
     switch ($Style) {
         'sel'   { Write-Host -NoNewline $inner -ForegroundColor Black -BackgroundColor Cyan }
         'title' { Write-Host -NoNewline $inner -ForegroundColor Magenta }
@@ -62,26 +111,39 @@ function Write-Row {
 # Returns the selected index, or -1 for q / back.
 function Show-Menu {
     param([string]$Title, [string[]]$Options)
-    $sel = 0
+    $sel = 0; $top0 = 0
+    $n = $Options.Count
     try { [Console]::CursorVisible = $false } catch {}
     while ($true) {
-        Show-Banner
+        Show-Banner    # redraws the banner and refreshes the layout each frame
+        # Fit the list to the terminal: show a scrolling window around the
+        # selection rather than letting a long list overflow.
+        $avail = $script:Lines - $script:BannerH - 8
+        if ($avail -lt 3) { $avail = 3 }
+        $win = $n; if ($win -gt $avail) { $win = $avail }
+        if ($sel -lt $top0) { $top0 = $sel }
+        if ($sel -ge $top0 + $win) { $top0 = $sel - $win + 1 }
+        if ($top0 -gt $n - $win) { $top0 = $n - $win }
+        if ($top0 -lt 0) { $top0 = 0 }
+
         Write-Edge $TL $TR
         Write-Row $Title 'title'
         Write-Edge $LT $RT
-        for ($i = 0; $i -lt $Options.Count; $i++) {
+        if ($top0 -gt 0) { Write-Row ("  $UPTRI $top0 more above") 'normal' }
+        for ($i = $top0; $i -lt $top0 + $win; $i++) {
             if ($i -eq $sel) { Write-Row ([string]$ARROW + ' ' + $Options[$i]) 'sel' }
             else { Write-Row ('  ' + $Options[$i]) 'normal' }
         }
+        if ($top0 + $win -lt $n) { Write-Row ("  $DNTRI $($n - $top0 - $win) more below") 'normal' }
         Write-Edge $BL $BR
         Write-Host ''
-        Write-Host ' Up/Down or j/k - Enter select - q back' -ForegroundColor DarkGray
+        Write-Host ($script:Pad + ' Up/Down or j/k - Enter select - q back') -ForegroundColor DarkGray
         $key = [Console]::ReadKey($true)
         switch ($key.Key) {
-            'UpArrow'   { $sel = (($sel - 1) + $Options.Count) % $Options.Count }
-            'DownArrow' { $sel = ($sel + 1) % $Options.Count }
-            'K'         { $sel = (($sel - 1) + $Options.Count) % $Options.Count }
-            'J'         { $sel = ($sel + 1) % $Options.Count }
+            'UpArrow'   { $sel = (($sel - 1) + $n) % $n }
+            'DownArrow' { $sel = ($sel + 1) % $n }
+            'K'         { $sel = (($sel - 1) + $n) % $n }
+            'J'         { $sel = ($sel + 1) % $n }
             'Enter'     { try { [Console]::CursorVisible = $true } catch {}; return $sel }
             'Q'         { try { [Console]::CursorVisible = $true } catch {}; return -1 }
         }

@@ -38,7 +38,13 @@ if [[ -t 1 ]]; then
 else
   RESET=''; BOLD=''; DIM=''; CYAN=''; GREEN=''; YELLOW=''; RED=''; MAGENTA=''; BLUE=''; HL=''; EL=''
 fi
-W=66   # panel width
+VERSION="0.1.0"
+MIN_W=40   # narrowest the panel is allowed to get
+MAX_W=72   # widest it will grow, so lines stay readable on a big terminal
+# Layout globals recomputed each frame by compute_layout, so the UI follows a
+# terminal resize: COLS/LINES_ hold the terminal size, W the panel width, PAD
+# the left margin that centers the panel, and COMPACT/BANNER_H the banner size.
+COLS=80; LINES_=24; W=$MAX_W; PAD=''; COMPACT=0; BANNER_H=9
 
 cleanup(){ printf '\033[?25h%s' "$RESET"; rm -f "$SCAN_CACHE"; }   # show cursor, reset colour, drop scan cache
 trap cleanup EXIT INT TERM
@@ -57,51 +63,106 @@ term_lines(){
   [[ $sz =~ ^[0-9]+$ ]] && printf '%s' "$sz" || printf '24'
 }
 
+# Visible terminal columns, read from the controlling tty like term_lines.
+term_cols(){
+  local sz; sz=$(stty size </dev/tty 2>/dev/null) || sz=""
+  sz=${sz##* }
+  [[ $sz =~ ^[0-9]+$ ]] && printf '%s' "$sz" || printf '80'
+}
+
+# Recompute the responsive layout from the current terminal size. Called at the
+# top of every menu frame and by banner_body, so panel width, centering and
+# banner height all track a live resize.
+compute_layout(){
+  COLS=$(term_cols); LINES_=$(term_lines)
+  W=$MAX_W
+  (( W > COLS - 2 )) && W=$(( COLS - 2 ))
+  (( W < MIN_W ))    && W=$MIN_W
+  (( W > COLS ))     && W=$COLS          # pathologically narrow terminal
+  local lp=$(( (COLS - W) / 2 )); (( lp < 0 )) && lp=0
+  PAD=$(repeat "$lp" ' ')
+  # Drop the wombat on a short or narrow terminal so the list keeps its room.
+  if (( LINES_ >= 20 && COLS >= 24 )); then COMPACT=0; BANNER_H=9; else COMPACT=1; BANNER_H=2; fi
+}
+
 repeat(){ local n=$1 c=$2 out=''; while (( n-- > 0 )); do out+="$c"; done; printf '%s' "$out"; }
 
 # Each primitive ends its line with $EL so a redraw overwrites in place and
 # wipes any trailing characters, instead of blanking the whole screen first.
-top(){    printf '%s╭%s╮%s'"$EL"'\n' "$CYAN" "$(repeat $((W-2)) '─')" "$RESET"; }
-bottom(){ printf '%s╰%s╯%s'"$EL"'\n' "$CYAN" "$(repeat $((W-2)) '─')" "$RESET"; }
-mid(){    printf '%s├%s┤%s'"$EL"'\n' "$CYAN" "$(repeat $((W-2)) '─')" "$RESET"; }
+top(){    printf '%s%s╭%s╮%s'"$EL"'\n' "$PAD" "$CYAN" "$(repeat $((W-2)) '─')" "$RESET"; }
+bottom(){ printf '%s%s╰%s╯%s'"$EL"'\n' "$PAD" "$CYAN" "$(repeat $((W-2)) '─')" "$RESET"; }
+mid(){    printf '%s%s├%s┤%s'"$EL"'\n' "$PAD" "$CYAN" "$(repeat $((W-2)) '─')" "$RESET"; }
 
-# row CONTENT [selected]  — full-width line inside the panel
+# row CONTENT [selected]  — full-width line inside the panel, PAD-centered.
+# Content longer than the panel is truncated so it never breaks the border.
 row(){
-  local s=" $1" n sel="${2:-0}" pad
-  n=${#s}; pad=$((W-2-n)); (( pad<0 )) && pad=0
+  local s=" $1" sel="${2:-0}" max=$((W-2)) pad
+  (( ${#s} > max )) && s="${s:0:max}"
+  pad=$(( max - ${#s} )); (( pad<0 )) && pad=0
   if [[ "$sel" == 1 ]]; then
-    printf '%s│%s%s%s%s│%s'"$EL"'\n' "$CYAN" "$RESET$HL" "$s$(repeat $pad ' ')" "$RESET" "$CYAN" "$RESET"
+    printf '%s%s│%s%s%s%s│%s'"$EL"'\n' "$PAD" "$CYAN" "$RESET$HL" "$s$(repeat $pad ' ')" "$RESET" "$CYAN" "$RESET"
   else
-    printf '%s│%s%s%s│%s'"$EL"'\n' "$CYAN" "$RESET" "$s$(repeat $pad ' ')" "$CYAN" "$RESET"
+    printf '%s%s│%s%s%s│%s'"$EL"'\n' "$PAD" "$CYAN" "$RESET" "$s$(repeat $pad ' ')" "$CYAN" "$RESET"
   fi
 }
 title_row(){
-  local s=" $1" n pad; n=${#s}; pad=$((W-2-n)); (( pad<0 )) && pad=0
-  printf '%s│%s%s%s%s│%s'"$EL"'\n' "$CYAN" "$BOLD$MAGENTA" "$s$(repeat $pad ' ')" "$RESET" "$CYAN" "$RESET"
+  local s=" $1" max=$((W-2)) pad
+  (( ${#s} > max )) && s="${s:0:max}"
+  pad=$(( max - ${#s} )); (( pad<0 )) && pad=0
+  printf '%s%s│%s%s%s%s│%s'"$EL"'\n' "$PAD" "$CYAN" "$BOLD$MAGENTA" "$s$(repeat $pad ' ')" "$RESET" "$CYAN" "$RESET"
+}
+
+# cline TEXT [COLOR] — print TEXT centered across the whole terminal width, with
+# $EL so a redraw overwrites cleanly. Used for the banner's single-line rows.
+cline(){
+  local text="$1" color="${2:-}" lp
+  lp=$(( (COLS - ${#text}) / 2 )); (( lp < 0 )) && lp=0
+  printf '%s%s%s%s'"$EL"'\n' "$(repeat "$lp" ' ')" "$color" "$text" "$RESET"
 }
 
 # banner_body draws without clearing (for flicker-free redraw); banner clears
-# first, for one-shot screens (run output, prompts).
+# first, for one-shot screens (run output, prompts). It recomputes the layout so
+# a direct caller (banner/run) centers correctly too, and shows the wombat only
+# when the terminal is big enough, falling back to a one-line banner otherwise.
 banner_body(){
-  printf '%s%s  WAMBLE  %s·%s  Windows And Mac BLE toolkit & PoCs%s'"$EL"'\n'"$EL"'\n' \
-    "$BOLD" "$CYAN" "$DIM" "$RESET$BOLD$CYAN" "$RESET"
+  compute_layout
+  if (( COMPACT )); then
+    cline "WAMBLE v$VERSION  Windows And Mac BLE" "$BOLD$CYAN"
+    printf '%s'"$EL"'\n'
+    return
+  fi
+  # The wombat mascot, centered as a block so its shape is preserved. Drawn
+  # squat and broad with a big nose and small rounded ears, the way a wombat is.
+  local art=('   __      __   ' '  /  \____/  \  ' ' / o        o \ ' '(     (__)     )' ' \            / ' "  '-||----||-'  ")
+  local art_w=16 line alp ap
+  alp=$(( (COLS - art_w) / 2 )); (( alp < 0 )) && alp=0
+  ap=$(repeat "$alp" ' ')
+  for line in "${art[@]}"; do
+    printf '%s%s%s%s'"$EL"'\n' "$ap" "$CYAN" "$line" "$RESET"
+  done
+  cline "WAMBLE  v$VERSION" "$BOLD$CYAN"
+  cline "Windows And Mac BLE toolkit & PoCs" "$DIM"
+  printf '%s'"$EL"'\n'
 }
 banner(){ clear_screen; banner_body; }
-footer(){ printf '%s'"$EL"'\n %s%s%s'"$EL"'\n' '' "$DIM" "$1" "$RESET"; }
+footer(){ printf '%s'"$EL"'\n%s %s%s%s'"$EL"'\n' '' "$PAD" "$DIM" "$1" "$RESET"; }
 
 # --- menu engine -----------------------------------------------------------
 # menu "Title" item1 item2 ...   -> sets REPLY_INDEX (-1 on q/back)
 REPLY_INDEX=-1
 menu(){
   local title="$1"; shift
-  local opts=("$@") n=$# sel=0 top0=0 key k2 i win avail H
+  local opts=("$@") n=$# sel=0 top0=0 key k2 i win avail H last_size=""
   hide_cursor
   clear_screen            # one clean slate on entry; every frame after redraws in place
   while true; do
     # Fit the list to the terminal: show a scrolling window of `win` rows around
     # the selection rather than letting a long list overflow and scroll.
-    H=$(term_lines)
-    avail=$(( H - 10 ))   # chrome: banner(2)+top/title/mid(3)+bottom(1)+footer(2)+2 scroll hints
+    compute_layout; H=$LINES_
+    # Full clear on a resize so no stale wider/taller frame is left behind.
+    if [[ "${COLS}x${LINES_}" != "$last_size" ]]; then clear_screen; last_size="${COLS}x${LINES_}"; fi
+    # chrome below the banner: top/title/mid(3)+bottom(1)+footer(2)+2 scroll hints
+    avail=$(( H - BANNER_H - 8 ))
     (( avail < 3 )) && avail=3
     win=$n; (( win > avail )) && win=$avail
     (( sel < top0 )) && top0=$sel
