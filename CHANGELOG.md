@@ -30,6 +30,14 @@ tagging releases.
 - `pyproject.toml` now carries the packaging metadata (`[project]`,
   `[project.scripts]`, `[build-system]`) and `wamble_cli.py` holds the thin
   entry-point wrappers.
+- Saved device-target profiles. `ble_targets.py` saves short aliases for a
+  device name or address (`add`, `list`, `remove`, `path`), and every connecting
+  tool then accepts `@alias` in place of the full identifier. This is handy on
+  macOS, where the address is a long per-host UUID that changes between reboots.
+  Aliases are resolved in `ble_common.find_device()`, so all tools pick them up.
+- `targets_path()`, `load_targets()`, `save_targets()` and `resolve_target()` in
+  `ble_common`. The profiles file location honours `$WAMBLE_TARGETS` and
+  otherwise lives under the platform config directory.
 
 ### Fixed
 
