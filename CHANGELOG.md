@@ -5,6 +5,25 @@ All notable changes to WAMBLE are recorded here. The format is based on
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once it starts
 tagging releases.
 
+## [Unreleased]
+
+### Added
+
+- Human-readable Bluetooth SIG and vendor names now appear next to UUIDs. The
+  GATT enumeration (`enum_ble`), the interactive client (`gatt_cli` services,
+  characteristics and descriptors tables) and `gatt_find` show the assigned name
+  for a UUID (for example `2a19` as "Battery Level" and the `2902` descriptor as
+  "Client Characteristic Configuration"). The descriptors table gained a Name
+  column, and `gatt_find` now reports the compact UUID and the name.
+- `uuid_name()` in `ble_common`, a single wrapper over bleak's assigned-numbers
+  table that returns a caller-supplied placeholder instead of the literal
+  "Unknown" for a UUID with no known name.
+
+### Fixed
+
+- Attribute tables no longer print the literal word "Unknown" for a UUID with no
+  assigned name; they show the normal placeholder instead.
+
 ## [0.1.0] - 2026-10-07
 
 ### Added
