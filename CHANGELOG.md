@@ -5,6 +5,15 @@ All notable changes to WAMBLE are recorded here. The format is based on
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once it starts
 tagging releases.
 
+## [Unreleased]
+
+### Added
+
+- `scan_ble` can write results as CSV with `--csv PATH`, one row per device,
+  alongside the existing `--write-to` JSON export. The two options can be given
+  together and share the same per-device fields (address, name, RSSI, local
+  name, advertised service UUIDs, manufacturer data, service data).
+
 ## [0.1.0] - 2026-10-07
 
 ### Added

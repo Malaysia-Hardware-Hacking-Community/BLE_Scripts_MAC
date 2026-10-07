@@ -107,7 +107,11 @@ python3 scan_ble.py -s 180f                        # only devices advertising 0x
 python3 scan_ble.py -m -70                         # ignore anything weaker than -70 dBm
 python3 scan_ble.py --plain                        # no table, pipe-friendly
 python3 scan_ble.py --write-to scan.json           # save results as JSON
+python3 scan_ble.py --csv scan.csv                 # save results as CSV (one row per device)
 ```
+
+`--write-to` and `--csv` can be combined to write both at once, and both carry
+the same per-device fields.
 
 ### Watching advertisements live
 

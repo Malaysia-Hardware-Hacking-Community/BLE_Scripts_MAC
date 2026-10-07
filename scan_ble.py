@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import csv
 import json
 from datetime import UTC, datetime
 from typing import Any
@@ -105,6 +106,99 @@ def make_table(
     return table, rows
 
 
+#: The column order shared by the CSV writer and its header row.
+CSV_FIELDS = [
+    "address",
+    "name",
+    "rssi",
+    "local_name",
+    "service_uuids",
+    "manufacturer_data",
+    "service_data",
+]
+
+
+def build_device_record(address: str, device: Any, adv: Any) -> dict:
+    """One device's discovery data, shared by the JSON and CSV writers.
+
+    Keeping this in one place means the two export formats never drift apart on
+    which fields they carry.
+    """
+    adv_data = parse_advertisement_data(adv)
+    return {
+        "address": address,
+        "name": device.name or adv.local_name or "(unnamed)",
+        "rssi": adv.rssi,
+        "local_name": adv.local_name,
+        "service_uuids": adv_data["service_uuids"],
+        "manufacturer_data": adv_data["manufacturer"],
+        "service_data": adv_data["service_data"],
+    }
+
+
+def csv_row(record: dict) -> dict:
+    """Flatten a device record's lists and dicts into CSV-safe string cells.
+
+    A CSV cell cannot hold a list or a dict, so the advertised service UUIDs are
+    joined with ``;`` and the service data is rendered as ``uuid=hex`` pairs. An
+    absent RSSI becomes an empty cell rather than the word "None".
+    """
+    service_data = record["service_data"]
+    return {
+        **record,
+        "rssi": "" if record["rssi"] is None else record["rssi"],
+        "local_name": record["local_name"] or "",
+        "service_uuids": ";".join(record["service_uuids"]),
+        "service_data": ";".join(f"{uuid}={data}" for uuid, data in service_data.items()),
+    }
+
+
+def write_csv(path: str, records: list[dict]) -> None:
+    """Write device records to *path* as CSV with a header row."""
+    with open(path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=CSV_FIELDS)
+        writer.writeheader()
+        for record in records:
+            writer.writerow(csv_row(record))
+
+
+def write_exports(
+    found: dict[str, tuple[Any, Any]],
+    *,
+    json_path: str | None,
+    csv_path: str | None,
+    timeout: float,
+) -> None:
+    """Write the discovery results to the requested file formats, if any.
+
+    Both formats draw from the same per-device records, so JSON and CSV always
+    carry identical fields. Does nothing when no output path was given or no
+    device was found.
+    """
+    if not (json_path or csv_path) or not found:
+        return
+
+    records = [
+        build_device_record(address, device, adv) for address, (device, adv) in found.items()
+    ]
+
+    if json_path:
+        output = {
+            # datetime.utcnow() is deprecated since 3.12; use an explicit UTC tz.
+            "timestamp": datetime.now(UTC).isoformat(),
+            "timeout": timeout,
+            "device_count": len(records),
+            "devices": records,
+        }
+        with open(json_path, "w") as f:
+            json.dump(output, f, indent=2)
+        console.print(f"[green]Discovery data written to {json_path}[/green]")
+
+    if csv_path:
+        write_csv(csv_path, records)
+        console.print(f"[green]Discovery data written to {csv_path}[/green]")
+
+
 async def main():
     parser = argparse.ArgumentParser(description="Scan nearby BLE advertisements.")
     parser.add_argument(
@@ -135,6 +229,12 @@ async def main():
         type=str,
         default=None,
         help="Write raw discovery data to a JSON file path",
+    )
+    parser.add_argument(
+        "--csv",
+        type=str,
+        default=None,
+        help="Write discovery data to a CSV file path (one row per device)",
     )
     args = parser.parse_args()
 
@@ -189,31 +289,7 @@ async def main():
         else:
             console.print(table)
 
-    # Optionally write raw data
-    if args.write_to and found:
-        output = {
-            # datetime.utcnow() is deprecated since 3.12; use an explicit UTC tz.
-            "timestamp": datetime.now(UTC).isoformat(),
-            "timeout": args.timeout,
-            "device_count": len(found),
-            "devices": [],
-        }
-        for address, (device, adv) in found.items():
-            adv_data = parse_advertisement_data(adv)
-            output["devices"].append(
-                {
-                    "address": address,
-                    "name": device.name or adv.local_name or "(unnamed)",
-                    "rssi": adv.rssi,
-                    "local_name": adv.local_name,
-                    "service_uuids": adv_data["service_uuids"],
-                    "manufacturer_data": adv_data["manufacturer"],
-                    "service_data": adv_data["service_data"],
-                }
-            )
-        with open(args.write_to, "w") as f:
-            json.dump(output, f, indent=2)
-        console.print(f"[green]Discovery data written to {args.write_to}[/green]")
+    write_exports(found, json_path=args.write_to, csv_path=args.csv, timeout=args.timeout)
 
 
 if __name__ == "__main__":
