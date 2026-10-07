@@ -102,6 +102,12 @@ def batch() -> None:
     _run(main)
 
 
+def profile() -> None:
+    from wamble.profiles import main
+
+    _run(main, "Stopped.")
+
+
 def adv_log() -> None:
     from wamble.adv_log import main
 

@@ -106,6 +106,7 @@ is named in the first column), and every tool takes `--help`.
 | `wamble-batch` ([`batch`](src/wamble/batch.py))                  | `gatttool` scripting                   | Run a script of the same GATT commands non-interactively, from a file or stdin. See [Scripting](#scripting-batch-commands).            |
 | `wamble-find` ([`find`](src/wamble/find.py))                     | `gatttool find`                        | Find characteristics or descriptors by UUID substring.                                                                                 |
 | `wamble-battery` ([`battery`](src/wamble/battery.py))            | `gatttool -t Random -n 0x180f`         | Read the standard Battery Level characteristic (`0x2A19`).                                                                             |
+| `wamble-profile` ([`profiles`](src/wamble/profiles.py))          | n/a                                    | Subscribe to and decode a SIG measurement profile: Heart Rate, Health Thermometer, or CSC. See [Reading a profile](#reading-a-profile). |
 | `wamble-device-info` ([`device_info`](src/wamble/device_info.py))| n/a                                    | Read the Device Information Service (`0x180A`): model, serial, firmware, hardware revisions.                                           |
 | `wamble-mtu` ([`mtu`](src/wamble/mtu.py))                        | `gatttool -m`                          | Report the negotiated ATT MTU. Read-only; see [MTU](#mtu-and-connection-parameters).                                                   |
 | `wamble-params` ([`params`](src/wamble/params.py))               | `btmgmt conn-update`                   | Read or request the Peripheral Preferred Connection Parameters characteristic (`0x2A04`).                                              |
@@ -243,6 +244,20 @@ wamble-find "Acme Tracker" 2902 --target descr
 wamble-device-info "Acme Tracker"
 wamble-battery "Acme Tracker"
 ```
+
+### Reading a profile
+
+`wamble-profile` subscribes to a standard SIG measurement characteristic and
+prints a decoded reading per update. It knows Heart Rate (`0x2A37`), the Health
+Thermometer (`0x2A1C`) and Cycling Speed & Cadence (`0x2A5B`):
+
+```bash
+wamble-profile "HR Monitor"                 # auto-detect which profile is present
+wamble-profile "HR Monitor" -p heart-rate   # 72 bpm (contact)
+wamble-profile "Thermometer" --timeout 30   # 37.0 °C
+```
+
+With no `-p` it auto-detects the first supported profile the device exposes.
 
 ### Export and diff
 

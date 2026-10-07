@@ -48,6 +48,7 @@ class TestConsoleScripts:
             "ctf": "wamble.ctf",
             "export": "wamble.export",
             "batch": "wamble.batch",
+            "profile": "wamble.profiles",
             "adv_log": "wamble.adv_log",
             "notify_log": "wamble.notify_log",
         }

@@ -9,6 +9,12 @@ tagging releases.
 
 ### Added
 
+- `wamble-profile`: subscribe to and decode a standard SIG measurement profile,
+  the way `wamble-battery` reads one characteristic. Handles Heart Rate
+  Measurement (`0x2A37`), Temperature Measurement (`0x2A1C`, Health Thermometer)
+  and CSC Measurement (`0x2A5B`), decoding each flags-driven layout (including
+  the IEEE-11073 float for temperature) and printing a reading per update.
+  Auto-detects the profile when `-p` is omitted.
 - `wamble-batch`: run a script of GATT commands non-interactively, from a file
   or stdin, against one connection. It uses exactly the same commands as
   `wamble-gatt` (reusing its dispatcher), plus a `wait <seconds>` line for
