@@ -4,6 +4,10 @@
 [![macOS](https://img.shields.io/badge/macOS-tested-success?logo=apple&logoColor=white)](https://github.com/Malaysia-Hardware-Hacking-Community/WAMBLE/actions/workflows/ci.yml)
 [![Windows](https://img.shields.io/badge/Windows-tested-success?logo=windows&logoColor=white)](https://github.com/Malaysia-Hardware-Hacking-Community/WAMBLE/actions/workflows/ci.yml)
 
+<p align="center">
+  <img src="assets/WAMBLE-TUI.png" alt="WAMBLE terminal UI (ble_tui) showing the main menu" width="720">
+</p>
+
 Bluetooth Low Energy tooling for **macOS and Windows**, in the shape of the
 Linux `gatttool` and BlueZ command-line utilities.
 
@@ -77,18 +81,18 @@ python3 gatt_cli.py "Device Name"    # poke at it interactively
 
 ## Scripts
 
-| Script | Replaces (Linux) | What it does |
-| --- | --- | --- |
-| [`scan_ble.py`](scan_ble.py) | `bluetoothctl scan on`, `hcitool scan` | Scan advertisements for a fixed window. Filter by name, service UUID or RSSI. Optionally dump JSON. |
-| [`watch_ble.py`](watch_ble.py) | `btmon` | Live-refreshing view of advertisements, strongest signal first, until interrupted. |
-| [`enum_ble.py`](enum_ble.py) | `gatttool -a` | Connect, list every service, characteristic and descriptor, and optionally read, list writable, or subscribe. Has a CTF-oriented mode. |
-| [`gatt_cli.py`](gatt_cli.py) | `gatttool` interactive mode | REPL: read, write, subscribe and unsubscribe against a live connection. See the [cheatsheet](GATT-CLI-CHEATSHEET.md). |
-| [`gatt_find.py`](gatt_find.py) | `gatttool find` | Find characteristics or descriptors by UUID substring. |
-| [`gatt_battery.py`](gatt_battery.py) | `gatttool -t Random -n 0x180f` | Read the standard Battery Level characteristic (`0x2A19`). |
-| [`read_device_info.py`](read_device_info.py) | n/a | Read the Device Information Service (`0x180A`): model, serial, firmware, hardware revisions. |
-| [`gatt_mtu.py`](gatt_mtu.py) | `gatttool -m` | Report the negotiated ATT MTU. Read-only; see [MTU](#mtu-and-connection-parameters). |
-| [`gatt_params.py`](gatt_params.py) | `btmgmt conn-update` | Read or request the Peripheral Preferred Connection Parameters characteristic (`0x2A04`). |
-| [`ble_common.py`](ble_common.py), [`ble_gatt.py`](ble_gatt.py) | n/a | Shared libraries. Not entry points. |
+| Script                                                         | Replaces (Linux)                       | What it does                                                                                                                           |
+| -------------------------------------------------------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| [`scan_ble.py`](scan_ble.py)                                   | `bluetoothctl scan on`, `hcitool scan` | Scan advertisements for a fixed window. Filter by name, service UUID or RSSI. Optionally dump JSON.                                    |
+| [`watch_ble.py`](watch_ble.py)                                 | `btmon`                                | Live-refreshing view of advertisements, strongest signal first, until interrupted.                                                     |
+| [`enum_ble.py`](enum_ble.py)                                   | `gatttool -a`                          | Connect, list every service, characteristic and descriptor, and optionally read, list writable, or subscribe. Has a CTF-oriented mode. |
+| [`gatt_cli.py`](gatt_cli.py)                                   | `gatttool` interactive mode            | REPL: read, write, subscribe and unsubscribe against a live connection. See the [cheatsheet](GATT-CLI-CHEATSHEET.md).                  |
+| [`gatt_find.py`](gatt_find.py)                                 | `gatttool find`                        | Find characteristics or descriptors by UUID substring.                                                                                 |
+| [`gatt_battery.py`](gatt_battery.py)                           | `gatttool -t Random -n 0x180f`         | Read the standard Battery Level characteristic (`0x2A19`).                                                                             |
+| [`read_device_info.py`](read_device_info.py)                   | n/a                                    | Read the Device Information Service (`0x180A`): model, serial, firmware, hardware revisions.                                           |
+| [`gatt_mtu.py`](gatt_mtu.py)                                   | `gatttool -m`                          | Report the negotiated ATT MTU. Read-only; see [MTU](#mtu-and-connection-parameters).                                                   |
+| [`gatt_params.py`](gatt_params.py)                             | `btmgmt conn-update`                   | Read or request the Peripheral Preferred Connection Parameters characteristic (`0x2A04`).                                              |
+| [`ble_common.py`](ble_common.py), [`ble_gatt.py`](ble_gatt.py) | n/a                                    | Shared libraries. Not entry points.                                                                                                    |
 
 Every script takes `--help`.
 
@@ -185,8 +189,8 @@ Windows you can use either the name or the MAC. All scripts accept either.
 
 **ATT handles.** BlueZ and `gatttool` expose the real ATT handle of each
 attribute. WinRT exposes real handles. **CoreBluetooth does not**, so bleak
-synthesizes a handle on macOS that is the characteristic *declaration* handle, one
-below the `gatttool` *value* handle. If a handle from a Linux walkthrough does not
+synthesizes a handle on macOS that is the characteristic _declaration_ handle, one
+below the `gatttool` _value_ handle. If a handle from a Linux walkthrough does not
 resolve on macOS, try one lower, or address the attribute by UUID, which always
 works.
 
@@ -206,7 +210,7 @@ binds to BlueZ's HCI socket. There is no equivalent on macOS or Windows.
 
 `gatt_params.py` reads the Peripheral Preferred Connection Parameters
 characteristic (`0x2A04`) on the GAP service (`0x1800`). These are the values the
-peripheral *prefers*, not the values in force. With `--set` it attempts to write
+peripheral _prefers_, not the values in force. With `--set` it attempts to write
 them, but PPCP is read-only on most peripherals, so the write is usually rejected.
 Even a central that wants to change a live connection has to do it over the link
 layer, which neither CoreBluetooth nor WinRT exposes. Many peripherals (including
@@ -229,6 +233,7 @@ Written against bleak 3.x.
 ## Troubleshooting
 
 **Nothing is found, or no permission prompt.**
+
 - macOS: Bluetooth access is off for your terminal. Enable it under
   **System Settings > Privacy & Security > Bluetooth**.
 - Windows: make sure Bluetooth is on in **Settings > Bluetooth & devices**, and
@@ -241,7 +246,7 @@ moment after connect. Retry, or raise `--connect-timeout`.
 requires bonding or encryption, and neither OS lets you force that pairing from a
 script.
 
-**A handle from a Linux writeup does not resolve on macOS.** See *ATT handles*
+**A handle from a Linux writeup does not resolve on macOS.** See _ATT handles_
 above. Address by UUID, or try the handle one lower.
 
 ## Tests
