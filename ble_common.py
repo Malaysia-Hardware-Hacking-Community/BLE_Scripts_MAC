@@ -1,5 +1,8 @@
 import asyncio
+import json
+import os
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 from bleak import BleakClient, BleakScanner, normalize_uuid_str
@@ -186,6 +189,66 @@ def short_uuid(uuid_128: str) -> str:
     return hex_16 if hex_16 is not None else str(uuid_128)
 
 
+def targets_path() -> Path:
+    """Location of the saved device-target profiles file.
+
+    Overridable with ``$WAMBLE_TARGETS`` (which the tests use). Otherwise it is
+    ``$XDG_CONFIG_HOME/wamble/targets.json`` (``~/.config/wamble/targets.json``
+    by default) on macOS and Linux, and ``%APPDATA%\\wamble\\targets.json`` on
+    Windows.
+    """
+    override = os.environ.get("WAMBLE_TARGETS")
+    if override:
+        return Path(override)
+    if os.name == "nt":
+        base = Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming")
+    else:
+        base = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
+    return base / "wamble" / "targets.json"
+
+
+def load_targets(path: Path | None = None) -> dict[str, str]:
+    """Return the saved ``alias -> identifier`` map, or ``{}`` if none is saved.
+
+    A missing or unreadable file, or one whose contents are not a JSON object,
+    yields an empty map rather than an error, so a corrupt file never stops a
+    tool from running. Only string values are kept.
+    """
+    path = path or targets_path()
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {str(k): v for k, v in data.items() if isinstance(v, str)}
+
+
+def save_targets(targets: dict[str, str], path: Path | None = None) -> None:
+    """Write the ``alias -> identifier`` map, creating the parent directory."""
+    path = path or targets_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(targets, f, indent=2, sort_keys=True)
+
+
+def resolve_target(identifier: str, path: Path | None = None) -> str:
+    """Expand a saved ``@alias`` to its identifier; pass anything else through.
+
+    A leading ``@`` marks a saved target name (see :func:`targets_path`). An
+    unknown alias is returned unchanged, so the caller's own "not found"
+    handling still applies.
+
+    >>> resolve_target("Living Room")
+    'Living Room'
+    """
+    text = str(identifier)
+    if not text.startswith("@"):
+        return text
+    return load_targets(path).get(text[1:], text)
+
+
 async def find_device(
     identifier: str,
     timeout: float = 15.0,
@@ -206,6 +269,9 @@ async def find_device(
         it is a CoreBluetooth-generated UUID scoped to this Mac, not the real
         MAC, and it changes between reboots, so prefer a name substring there.
     """
+    # Expand a saved "@alias" to the real name or address before matching, so
+    # every connecting tool accepts a target profile with no extra work.
+    identifier = resolve_target(identifier)
     # Strip surrounding whitespace: an address pasted from a wrapped table cell
     # or a shell prompt often carries a leading/trailing space or newline, which
     # would otherwise defeat the exact address comparison below.
@@ -557,14 +623,18 @@ __all__ = [
     "format_properties",
     "gatt_error_code",
     "is_gatt_refusal",
+    "load_targets",
     "parse_advertisement_data",
     "print_characteristics_table",
     "print_descriptors_table",
     "print_gatt_tables",
     "print_services_table",
     "read_gatt_char",
+    "resolve_target",
+    "save_targets",
     "short_uuid",
     "show_value",
+    "targets_path",
     "uuid16_from_128",
     "write_gatt_char",
 ]

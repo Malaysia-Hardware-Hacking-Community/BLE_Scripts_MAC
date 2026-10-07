@@ -5,6 +5,19 @@ All notable changes to WAMBLE are recorded here. The format is based on
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once it starts
 tagging releases.
 
+## [Unreleased]
+
+### Added
+
+- Saved device-target profiles. `ble_targets.py` saves short aliases for a
+  device name or address (`add`, `list`, `remove`, `path`), and every connecting
+  tool then accepts `@alias` in place of the full identifier. This is handy on
+  macOS, where the address is a long per-host UUID that changes between reboots.
+  Aliases are resolved in `ble_common.find_device()`, so all tools pick them up.
+- `targets_path()`, `load_targets()`, `save_targets()` and `resolve_target()` in
+  `ble_common`. The profiles file location honours `$WAMBLE_TARGETS` and
+  otherwise lives under the platform config directory.
+
 ## [0.1.0] - 2026-10-07
 
 ### Added

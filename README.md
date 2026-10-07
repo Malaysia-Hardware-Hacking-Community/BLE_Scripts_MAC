@@ -92,6 +92,7 @@ python3 gatt_cli.py "Device Name"    # poke at it interactively
 | [`read_device_info.py`](read_device_info.py)                   | n/a                                    | Read the Device Information Service (`0x180A`): model, serial, firmware, hardware revisions.                                           |
 | [`gatt_mtu.py`](gatt_mtu.py)                                   | `gatttool -m`                          | Report the negotiated ATT MTU. Read-only; see [MTU](#mtu-and-connection-parameters).                                                   |
 | [`gatt_params.py`](gatt_params.py)                             | `btmgmt conn-update`                   | Read or request the Peripheral Preferred Connection Parameters characteristic (`0x2A04`).                                              |
+| [`ble_targets.py`](ble_targets.py)                             | n/a                                    | Save short aliases for devices (`@name`), so any connecting tool can target them. See [Target profiles](#target-profiles).             |
 | [`ble_common.py`](ble_common.py), [`ble_gatt.py`](ble_gatt.py) | n/a                                    | Shared libraries. Not entry points.                                                                                                    |
 
 Every script takes `--help`.
@@ -150,6 +151,27 @@ python3 gatt_find.py "Acme Tracker" 2902 --target descr
 python3 read_device_info.py "Acme Tracker"
 python3 gatt_battery.py "Acme Tracker"
 ```
+
+### Target profiles
+
+Typing a device name or address every time gets old, especially on macOS where
+the address is a long per-host UUID that changes between reboots. Save a short
+alias once, then target it with `@name` from any connecting tool:
+
+```bash
+python3 ble_targets.py add tv "[TV] Samsung Q60 Series"   # save an alias
+python3 ble_targets.py add led "GBK_H619A"
+python3 ble_targets.py list                               # show saved aliases
+python3 enum_ble.py @tv                                   # use it anywhere
+python3 gatt_battery.py @led
+python3 ble_targets.py remove tv                          # delete an alias
+python3 ble_targets.py path                               # where the file lives
+```
+
+An alias maps to whatever you would otherwise type: a name substring or an
+address. Aliases are stored in a small JSON file (run `ble_targets.py path` to
+see where). An unknown `@name` is reported as "not found", the same as any other
+target that is not nearby.
 
 ## Menu TUI, exploits, and CTF client
 
