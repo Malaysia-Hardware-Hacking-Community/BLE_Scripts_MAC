@@ -90,6 +90,12 @@ def ctf() -> None:
     _run(main)
 
 
+def export() -> None:
+    from wamble.export import main
+
+    _run(main)
+
+
 def targets() -> None:
     # The target-profile manager is synchronous (it only reads and writes a JSON
     # file), so it is called directly rather than through the asyncio _run helper.

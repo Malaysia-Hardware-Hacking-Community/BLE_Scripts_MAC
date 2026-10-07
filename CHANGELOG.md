@@ -5,6 +5,17 @@ All notable changes to WAMBLE are recorded here. The format is based on
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once it starts
 tagging releases.
 
+## [Unreleased]
+
+### Added
+
+- `wamble-export`: dump a device's full GATT tree (services, characteristics,
+  descriptors, properties) to stable, sorted JSON with `-o`, and compare two
+  snapshots offline with `--diff OLD NEW`. The diff reports services and
+  characteristics added or removed, descriptors added or removed, and
+  characteristic properties that changed, so a firmware update or a difference
+  between two units is easy to spot.
+
 ## [0.1.2] - 2026-10-07
 
 ### Added
