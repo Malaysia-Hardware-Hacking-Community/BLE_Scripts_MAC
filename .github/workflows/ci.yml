@@ -58,14 +58,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
       - name: Byte-compile every module
-        run: python -m py_compile *.py BLE-Exploits/*.py
+        run: python -m py_compile src/wamble/*.py src/wamble/exploits/*.py
       - name: Lint (redundancy, simplifications, slow patterns, complexity)
         run: ruff check .
       - name: Formatter drift check
         run: ruff format --check .
       - name: Dead code
-        run: vulture *.py BLE-Exploits/*.py --min-confidence 80
+        run: vulture src/wamble --min-confidence 80
       - name: Duplicate logic
         run: >
           pylint --disable=all --enable=duplicate-code
-          *.py BLE-Exploits/*.py
+          src/wamble

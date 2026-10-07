@@ -17,9 +17,11 @@ try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}
 # --- paths -----------------------------------------------------------------
 $Here = $PSScriptRoot
 if ([string]::IsNullOrEmpty($Here)) { $Here = Split-Path -Parent $MyInvocation.MyCommand.Path }
-$Toolkit  = $Here
-$Exploits = Join-Path $Here 'BLE-Exploits'
-$Captures = Join-Path $Exploits 'captures'
+$Src = Join-Path $Here 'src'
+$Captures = Join-Path $Src 'wamble/exploits/captures'
+# Make the wamble package importable for `python -m wamble.*`, installed or not.
+if ($env:PYTHONPATH) { $env:PYTHONPATH = "$Src$([IO.Path]::PathSeparator)$env:PYTHONPATH" }
+else { $env:PYTHONPATH = $Src }
 
 # --- python: prefer local venv, else python / py ---------------------------
 $Py = $null
@@ -167,20 +169,24 @@ function Confirm-Yes {
 }
 
 function Invoke-Tool {
+    # CmdArgs[0] is a module spec (e.g. 'wamble.scan'); the tool runs as a module.
     param([string[]]$CmdArgs)
     try { [Console]::CursorVisible = $true } catch {}
     Show-Banner
-    Write-Host (' > ' + ($CmdArgs -join ' ')) -ForegroundColor Green
+    $full = @('-m') + $CmdArgs
+    Write-Host (' > ' + $Py + ' ' + ($full -join ' ')) -ForegroundColor Green
     Write-Host ''
-    & $Py @CmdArgs
+    & $Py @full
     Write-Host ''
     Read-Host '[done] Press Enter to return' | Out-Null
 }
 
 function Get-Device { return (Ask 'Target device (name substring or address)') }
 
-function Tool([string]$name) { return (Join-Path $Toolkit $name) }
-function Exp([string]$name)  { return (Join-Path $Exploits $name) }
+# Map a tool to its module: toolkit tools are wamble.<name>, exploits are
+# wamble.exploits.<name>.
+function Tool([string]$name) { return "wamble.$name" }
+function Exp([string]$name)  { return "wamble.exploits.$name" }
 
 # --- toolkit menu ----------------------------------------------------------
 function Show-ToolkitMenu {
@@ -197,15 +203,15 @@ function Show-ToolkitMenu {
             'Connection params (--get)  (gatt_params)',
             'Back')
         switch ($i) {
-            0 { $s = Ask 'Scan seconds' '8'; Invoke-Tool @((Tool 'scan_ble.py'), '-t', $s) }
-            1 { $t = Ask 'Timeout seconds' '20'; Invoke-Tool @((Tool 'watch_ble.py'), '--timeout', $t) }
-            2 { $d = Get-Device; if ($d) { Invoke-Tool @((Tool 'enum_ble.py'), $d, '--readable') } }
-            3 { $d = Get-Device; if ($d) { Invoke-Tool @((Tool 'gatt_cli.py'), $d) } }
-            4 { $d = Get-Device; if ($d) { $u = Ask 'UUID substring'; Invoke-Tool @((Tool 'gatt_find.py'), $d, $u) } }
-            5 { $d = Get-Device; if ($d) { Invoke-Tool @((Tool 'gatt_battery.py'), $d) } }
-            6 { $d = Get-Device; if ($d) { Invoke-Tool @((Tool 'read_device_info.py'), $d) } }
-            7 { $d = Get-Device; if ($d) { Invoke-Tool @((Tool 'gatt_mtu.py'), $d) } }
-            8 { $d = Get-Device; if ($d) { Invoke-Tool @((Tool 'gatt_params.py'), $d, '--get') } }
+            0 { $s = Ask 'Scan seconds' '8'; Invoke-Tool @((Tool 'scan'), '-t', $s) }
+            1 { $t = Ask 'Timeout seconds' '20'; Invoke-Tool @((Tool 'watch'), '--timeout', $t) }
+            2 { $d = Get-Device; if ($d) { Invoke-Tool @((Tool 'enum'), $d, '--readable') } }
+            3 { $d = Get-Device; if ($d) { Invoke-Tool @((Tool 'interactive'), $d) } }
+            4 { $d = Get-Device; if ($d) { $u = Ask 'UUID substring'; Invoke-Tool @((Tool 'find'), $d, $u) } }
+            5 { $d = Get-Device; if ($d) { Invoke-Tool @((Tool 'battery'), $d) } }
+            6 { $d = Get-Device; if ($d) { Invoke-Tool @((Tool 'device_info'), $d) } }
+            7 { $d = Get-Device; if ($d) { Invoke-Tool @((Tool 'mtu'), $d) } }
+            8 { $d = Get-Device; if ($d) { Invoke-Tool @((Tool 'params'), $d, '--get') } }
             default { return }
         }
     }
@@ -233,12 +239,12 @@ function Show-ExploitMenu {
             'Device-name deface to PWNED!   (deface, gated)',
             'Back')
         switch ($i) {
-            0 { $d = Get-Device; if ($d) { Invoke-Tool @((Exp 'ble_recon_dump.py'), $d) } }
-            1 { $d = Get-Device; if ($d) { Invoke-Tool @((Exp 'ble_posture_scan.py'), $d) } }
-            2 { $d = Get-Device; if ($d) { $s = Ask 'Capture seconds' '12'; Invoke-Tool @((Exp 'ble_notify_capture.py'), $d, '--duration', $s) } }
-            3 { $d = Get-Device; if ($d) { $s = Ask 'Listen seconds' '25'; Invoke-Tool @((Exp 'ble_adv_harvest.py'), $d, '--timeout', $s) } }
-            4 { $d = Get-Device; if ($d -and (Require-Auth $d)) { Invoke-Tool @((Exp 'ble_led_unauth_control.py'), $d, '--authorized', '--demo') } }
-            5 { $d = Get-Device; if ($d -and (Require-Auth $d)) { $c = Ask 'Capture file to replay (path)'; if ($c) { Invoke-Tool @((Exp 'ble_replay.py'), $d, '--authorized', '--from-capture', $c) } } }
+            0 { $d = Get-Device; if ($d) { Invoke-Tool @((Exp 'recon_dump'), $d) } }
+            1 { $d = Get-Device; if ($d) { Invoke-Tool @((Exp 'posture_scan'), $d) } }
+            2 { $d = Get-Device; if ($d) { $s = Ask 'Capture seconds' '12'; Invoke-Tool @((Exp 'notify_capture'), $d, '--duration', $s) } }
+            3 { $d = Get-Device; if ($d) { $s = Ask 'Listen seconds' '25'; Invoke-Tool @((Exp 'adv_harvest'), $d, '--timeout', $s) } }
+            4 { $d = Get-Device; if ($d -and (Require-Auth $d)) { Invoke-Tool @((Exp 'led_unauth_control'), $d, '--authorized', '--demo') } }
+            5 { $d = Get-Device; if ($d -and (Require-Auth $d)) { $c = Ask 'Capture file to replay (path)'; if ($c) { Invoke-Tool @((Exp 'replay'), $d, '--authorized', '--from-capture', $c) } } }
             6 { $d = Get-Device; if ($d -and (Require-Auth $d)) { Show-PersistMenu $d } }
             7 { $d = Get-Device; if ($d -and (Require-Auth $d)) { Show-DefaceMenu $d } }
             default { return }
@@ -249,8 +255,8 @@ function Show-ExploitMenu {
 function Show-PersistMenu([string]$dev) {
     $i = Show-Menu "Persistence phase for $dev" @('arm (set state, then power-cycle)', 'verify (after reboot)', 'Back')
     switch ($i) {
-        0 { $hex = Ask 'Value to persist, hex (known-valid!)'; if ($hex) { Invoke-Tool @((Exp 'ble_persistence_test.py'), 'arm', $dev, '--authorized', '--write', $hex) } }
-        1 { Invoke-Tool @((Exp 'ble_persistence_test.py'), 'verify', $dev, '--authorized') }
+        0 { $hex = Ask 'Value to persist, hex (known-valid!)'; if ($hex) { Invoke-Tool @((Exp 'persistence_test'), 'arm', $dev, '--authorized', '--write', $hex) } }
+        1 { Invoke-Tool @((Exp 'persistence_test'), 'verify', $dev, '--authorized') }
         default { return }
     }
 }
@@ -258,8 +264,8 @@ function Show-PersistMenu([string]$dev) {
 function Show-DefaceMenu([string]$dev) {
     $i = Show-Menu "Deface $dev (Device Name -> PWNED!)" @('deface (write PWNED!)', 'restore original name', 'Back')
     switch ($i) {
-        0 { Invoke-Tool @((Exp 'ble_deface.py'), $dev, '--authorized') }
-        1 { Invoke-Tool @((Exp 'ble_deface.py'), $dev, '--authorized', '--restore') }
+        0 { Invoke-Tool @((Exp 'deface'), $dev, '--authorized') }
+        1 { Invoke-Tool @((Exp 'deface'), $dev, '--authorized', '--restore') }
         default { return }
     }
 }
@@ -269,7 +275,7 @@ function Show-CtfMenu {
     Show-Banner
     $dev = Ask 'CTF device name/address' '2b00042f7481c7b056c4b410d28f33cf'
     if (-not $dev) { return }
-    $ctf = Tool 'ble_ctf.py'
+    $ctf = Tool 'ctf'
     while ($true) {
         $i = Show-Menu "BLE CTF client - target: $dev" @(
             'Enumerate (handles)',

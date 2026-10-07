@@ -1,4 +1,4 @@
-"""Tests for the capture-loader in BLE-Exploits/ble_replay.py.
+"""Tests for the capture-loader in wamble.exploits.replay.
 
 load_commands() parses a prior capture JSON into a replayable packet list; its
 error paths (no commands, nothing replayable) matter because a silent empty
@@ -6,16 +6,10 @@ replay would look like the exploit failed. Pure file logic, no adapter needed.
 """
 
 import json
-import sys
-from pathlib import Path
 
 import pytest
 
-_EXPLOITS = Path(__file__).resolve().parent.parent / "BLE-Exploits"
-if str(_EXPLOITS) not in sys.path:
-    sys.path.insert(0, str(_EXPLOITS))
-
-from ble_replay import load_commands
+from wamble.exploits.replay import load_commands
 
 
 def _write(tmp_path, obj) -> str:

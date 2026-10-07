@@ -1,22 +1,15 @@
-"""Tests for the Govee control-packet builder in BLE-Exploits.
+"""Tests for the Govee control-packet builder in wamble.exploits.
 
 The exploit's correctness rests entirely on the 20-byte framing and the XOR
 checksum: a wrong checksum means the controller silently drops the packet. This
-is pure logic, so it is tested without a Bluetooth adapter. The BLE-Exploits
-directory is put on the path here the same way conftest handles the parent.
+is pure logic, so it is tested without a Bluetooth adapter.
 """
 
-import sys
 from functools import reduce
-from pathlib import Path
 
 import pytest
 
-_EXPLOITS = Path(__file__).resolve().parent.parent / "BLE-Exploits"
-if str(_EXPLOITS) not in sys.path:
-    sys.path.insert(0, str(_EXPLOITS))
-
-from ble_led_unauth_control import (
+from wamble.exploits.led_unauth_control import (
     PACKET_LEN,
     brightness_packet,
     color_packet,

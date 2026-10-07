@@ -1,4 +1,4 @@
-"""Tests for the saved device-target profiles in ble_common.
+"""Tests for the saved device-target profiles in wamble.common.
 
 The resolution (@alias -> identifier) and the load/save round-trip are what let
 every connecting tool accept a short target name, so they are unit-tested
@@ -10,7 +10,7 @@ import json
 import os
 from pathlib import Path
 
-from ble_common import load_targets, resolve_target, save_targets, targets_path
+from wamble.common import load_targets, resolve_target, save_targets, targets_path
 
 
 class TestTargetsPath:

@@ -19,7 +19,7 @@ What you thought would happen instead.
 
 ## Steps to reproduce
 
-1. The exact command you ran, for example `python enum_ble.py "MyDevice"`
+1. The exact command you ran, for example `wamble-enum "MyDevice"`
 2. ...
 3. ...
 

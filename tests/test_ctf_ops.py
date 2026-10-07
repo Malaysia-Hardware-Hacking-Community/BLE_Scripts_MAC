@@ -1,4 +1,4 @@
-"""Offline validation of ble_ctf.py's primitives against the fake-BLE harness.
+"""Offline validation of wamble.ctf's primitives against the fake-BLE harness.
 
 Proves the CTF read/write/read-loop/listen operations behave correctly without
 a Bluetooth adapter, so the toolkit is validated before the CTF device is
@@ -6,7 +6,7 @@ plugged in. The gatt_env fixture (conftest) exposes a readable+notify char at
 handle 0x0020 and a writable char at 0x0030.
 """
 
-from ble_ctf import (
+from wamble.ctf import (
     _hex_to_bytes,
     op_read,
     op_readloop,
@@ -81,7 +81,7 @@ async def test_op_listen_subscribes_triggers_captures_and_unsubscribes(gatt_env)
 
     client.start_notify = start_and_deliver
 
-    from ble_ctf import op_listen
+    from wamble.ctf import op_listen
 
     events = await op_listen(client, "0x0020", trigger=b"\x69", secs=0, response=False)
 
