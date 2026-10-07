@@ -36,6 +36,7 @@ wamble-device-info = "wamble.cli:device_info"
 wamble-mtu = "wamble.cli:mtu"
 wamble-params = "wamble.cli:params"
 wamble-ctf = "wamble.cli:ctf"
+wamble-targets = "wamble.cli:targets"
 
 [tool.setuptools.packages.find]
 # src layout: the toolkit is the ``wamble`` package (and its ``exploits``

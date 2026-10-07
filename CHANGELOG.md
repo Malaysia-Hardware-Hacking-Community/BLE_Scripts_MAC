@@ -7,6 +7,12 @@ tagging releases.
 
 ## [Unreleased]
 
+### Added
+
+- A `wamble-targets` console command for the device-target profile manager, so
+  it is a first-class command alongside the other tools (previously it was only
+  runnable as `python -m wamble.targets`).
+
 ### Changed
 
 - Reorganised the repository into a `src/` layout. The toolkit is now the

@@ -5,7 +5,7 @@ connecting tool accepts ``@alias`` in place of the full identifier, which is
 handy on macOS where the address is a long per-host UUID that changes between
 reboots. For example::
 
-    python -m wamble.targets add tv "[TV] Samsung Q60 Series"
+    wamble-targets add tv "[TV] Samsung Q60 Series"
     wamble-enum @tv
 
 Profiles live in a small JSON file (see the ``path`` command). This tool only

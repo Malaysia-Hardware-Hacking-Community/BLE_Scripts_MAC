@@ -51,3 +51,13 @@ class TestConsoleScripts:
             assert callable(getattr(cli, func)), func
             main = importlib.import_module(module_name).main
             assert asyncio.iscoroutinefunction(main), f"{module_name}.main must be async"
+
+    def test_targets_wrapper_targets_a_sync_main(self):
+        # Unlike the other tools, the target-profile manager is synchronous, so
+        # its wrapper calls main() directly rather than via asyncio.
+        import asyncio
+
+        from wamble.targets import main
+
+        assert callable(cli.targets)
+        assert not asyncio.iscoroutinefunction(main)
