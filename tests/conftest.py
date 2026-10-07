@@ -5,15 +5,13 @@ cannot tell the difference. Names and shapes are asserted by
 ``tests/test_harness.py``.
 """
 
-import sys
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from bleak import normalize_uuid_str
 
-# The scripts live in the repository root, not in ``tests/``.
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+# The package is importable as ``wamble`` via pytest's ``pythonpath = src`` (see
+# pytest.ini), so no sys.path juggling is needed here.
 
 # Normalised once at import so they are not recomputed in default arguments.
 _BATTERY_LEVEL_UUID = normalize_uuid_str("2a19")

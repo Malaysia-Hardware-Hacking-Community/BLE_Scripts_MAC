@@ -1,6 +1,6 @@
 import pytest
 
-from ble_gatt import (
+from wamble.gatt import (
     as_handle,
     chunk_payload,
     is_descriptor,
@@ -175,34 +175,34 @@ class TestUuidFormSymmetry:
 
 class TestBleCommonDelegates:
     def test_find_characteristic_resolves_by_handle(self, gatt_env):
-        from ble_common import find_characteristic
+        from wamble.common import find_characteristic
 
         assert find_characteristic(gatt_env.client, "32") is gatt_env.battery_char
 
     def test_find_characteristic_rejects_a_descriptor_handle(self, gatt_env):
-        from ble_common import find_characteristic
+        from wamble.common import find_characteristic
 
         assert find_characteristic(gatt_env.client, "16") is None
 
     def test_find_descriptor_resolves_by_handle(self, gatt_env):
-        from ble_common import find_descriptor
+        from wamble.common import find_descriptor
 
         found = find_descriptor(gatt_env.battery_char, "16")
         assert found is gatt_env.config_desc
 
     def test_find_descriptor_resolves_by_hex_handle(self, gatt_env):
-        from ble_common import find_descriptor
+        from wamble.common import find_descriptor
 
         found = find_descriptor(gatt_env.battery_char, "0x10")
         assert found is gatt_env.config_desc
 
     def test_find_descriptor_defaults_to_first(self, gatt_env):
-        from ble_common import find_descriptor
+        from wamble.common import find_descriptor
 
         assert find_descriptor(gatt_env.battery_char) is gatt_env.config_desc
 
     def test_find_characteristic_by_property_still_returns_a_list(self, gatt_env):
-        from ble_common import find_characteristic
+        from wamble.common import find_characteristic
 
         found = find_characteristic(gatt_env.client, "write", by="property")
         assert [c.handle for c in found] == [0x0030]
@@ -318,36 +318,36 @@ class TestReadAndWriteTarget:
 
 class TestUuidName:
     def test_known_16_bit_service(self):
-        from ble_common import uuid_name
+        from wamble.common import uuid_name
 
         assert uuid_name("180f") == "Battery Service"
 
     def test_known_16_bit_characteristic(self):
-        from ble_common import uuid_name
+        from wamble.common import uuid_name
 
         assert uuid_name("2a19") == "Battery Level"
 
     def test_known_descriptor(self):
-        from ble_common import uuid_name
+        from wamble.common import uuid_name
 
         assert uuid_name("2902") == "Client Characteristic Configuration"
 
     def test_full_128_bit_sig_uuid_resolves(self):
-        from ble_common import uuid_name
+        from wamble.common import uuid_name
 
         assert uuid_name("0000180f-0000-1000-8000-00805f9b34fb") == "Battery Service"
 
     def test_unknown_uuid_returns_empty_by_default(self):
-        from ble_common import uuid_name
+        from wamble.common import uuid_name
 
         assert uuid_name("12345678-1234-1234-1234-1234567890ab") == ""
 
     def test_unknown_uuid_returns_the_given_placeholder(self):
-        from ble_common import uuid_name
+        from wamble.common import uuid_name
 
         assert uuid_name("12345678-1234-1234-1234-1234567890ab", "—") == "—"
 
     def test_non_string_input_falls_back_to_default(self):
-        from ble_common import uuid_name
+        from wamble.common import uuid_name
 
         assert uuid_name(None, "—") == "—"

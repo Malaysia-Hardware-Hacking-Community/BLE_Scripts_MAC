@@ -14,9 +14,11 @@ set -uo pipefail
 
 # --- paths -----------------------------------------------------------------
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TOOLKIT="$HERE"
-EXPLOITS="$HERE/BLE-Exploits"
-CAPTURES="$EXPLOITS/captures"
+SRC="$HERE/src"
+CAPTURES="$SRC/wamble/exploits/captures"
+# Make the wamble package importable for `python -m wamble.*`, whether or not the
+# project has been pip-installed. (An editable install points here anyway.)
+export PYTHONPATH="$SRC${PYTHONPATH:+:$PYTHONPATH}"
 # Scan results are cached here so one scan can feed many actions (see
 # pick_device). Per-PID path keeps concurrent TUIs from clobbering each other.
 SCAN_CACHE="${TMPDIR:-/tmp}/wamble_scan.$$.json"
@@ -221,7 +223,7 @@ run(){ # run a command, show output, pause
 
 run_scan_to_cache(){ # $1 = seconds; progress + table shown on the tty
   local secs="${1:-$SCAN_SECONDS}"
-  "$PY" "$TOOLKIT/scan_ble.py" -t "$secs" --write-to "$SCAN_CACHE" >/dev/tty 2>&1
+  "$PY" -m wamble.scan -t "$secs" --write-to "$SCAN_CACHE" >/dev/tty 2>&1
   printf '\n %sPress Enter to choose a device…%s' "$DIM" "$RESET" >/dev/tty
   IFS= read -r _ </dev/tty
 }
@@ -284,15 +286,15 @@ pick_device(){ # echoes a device identifier, or nothing if cancelled
 need_device(){ pick_device; }
 
 # --- toolkit actions -------------------------------------------------------
-t_scan(){ banner; local s; s="$(ask 'Scan seconds' '8')"; run "$PY" "$TOOLKIT/scan_ble.py" -t "$s" --write-to "$SCAN_CACHE"; }
-t_watch(){ banner; local to; to="$(ask 'Timeout seconds (blank=until Ctrl-C)' '20')"; run "$PY" "$TOOLKIT/watch_ble.py" --timeout "$to"; }
-t_enum(){ local d; d="$(need_device)"; [[ -z $d ]] && return; run "$PY" "$TOOLKIT/enum_ble.py" "$d" --readable; }
-t_cli(){ local d; d="$(need_device)"; [[ -z $d ]] && return; run "$PY" "$TOOLKIT/gatt_cli.py" "$d"; }
-t_find(){ local d u; d="$(need_device)"; [[ -z $d ]] && return; u="$(ask 'UUID substring')"; run "$PY" "$TOOLKIT/gatt_find.py" "$d" "$u"; }
-t_batt(){ local d; d="$(need_device)"; [[ -z $d ]] && return; run "$PY" "$TOOLKIT/gatt_battery.py" "$d"; }
-t_info(){ local d; d="$(need_device)"; [[ -z $d ]] && return; run "$PY" "$TOOLKIT/read_device_info.py" "$d"; }
-t_mtu(){ local d; d="$(need_device)"; [[ -z $d ]] && return; run "$PY" "$TOOLKIT/gatt_mtu.py" "$d"; }
-t_params(){ local d; d="$(need_device)"; [[ -z $d ]] && return; run "$PY" "$TOOLKIT/gatt_params.py" "$d" --get; }
+t_scan(){ banner; local s; s="$(ask 'Scan seconds' '8')"; run "$PY" -m wamble.scan -t "$s" --write-to "$SCAN_CACHE"; }
+t_watch(){ banner; local to; to="$(ask 'Timeout seconds (blank=until Ctrl-C)' '20')"; run "$PY" -m wamble.watch --timeout "$to"; }
+t_enum(){ local d; d="$(need_device)"; [[ -z $d ]] && return; run "$PY" -m wamble.enum "$d" --readable; }
+t_cli(){ local d; d="$(need_device)"; [[ -z $d ]] && return; run "$PY" -m wamble.interactive "$d"; }
+t_find(){ local d u; d="$(need_device)"; [[ -z $d ]] && return; u="$(ask 'UUID substring')"; run "$PY" -m wamble.find "$d" "$u"; }
+t_batt(){ local d; d="$(need_device)"; [[ -z $d ]] && return; run "$PY" -m wamble.battery "$d"; }
+t_info(){ local d; d="$(need_device)"; [[ -z $d ]] && return; run "$PY" -m wamble.device_info "$d"; }
+t_mtu(){ local d; d="$(need_device)"; [[ -z $d ]] && return; run "$PY" -m wamble.mtu "$d"; }
+t_params(){ local d; d="$(need_device)"; [[ -z $d ]] && return; run "$PY" -m wamble.params "$d" --get; }
 
 toolkit_menu(){
   while true; do
@@ -316,17 +318,17 @@ toolkit_menu(){
 }
 
 # --- exploit actions (authorized / own-device) -----------------------------
-e_recon(){ local d; d="$(need_device)"; [[ -z $d ]] && return; run "$PY" "$EXPLOITS/ble_recon_dump.py" "$d"; }
-e_posture(){ local d; d="$(need_device)"; [[ -z $d ]] && return; run "$PY" "$EXPLOITS/ble_posture_scan.py" "$d"; }
-e_notify(){ local d s; d="$(need_device)"; [[ -z $d ]] && return; s="$(ask 'Capture seconds' '12')"; run "$PY" "$EXPLOITS/ble_notify_capture.py" "$d" --duration "$s"; }
-e_adv(){ local d s; d="$(need_device)"; [[ -z $d ]] && return; s="$(ask 'Listen seconds' '25')"; run "$PY" "$EXPLOITS/ble_adv_harvest.py" "$d" --timeout "$s"; }
+e_recon(){ local d; d="$(need_device)"; [[ -z $d ]] && return; run "$PY" -m wamble.exploits.recon_dump "$d"; }
+e_posture(){ local d; d="$(need_device)"; [[ -z $d ]] && return; run "$PY" -m wamble.exploits.posture_scan "$d"; }
+e_notify(){ local d s; d="$(need_device)"; [[ -z $d ]] && return; s="$(ask 'Capture seconds' '12')"; run "$PY" -m wamble.exploits.notify_capture "$d" --duration "$s"; }
+e_adv(){ local d s; d="$(need_device)"; [[ -z $d ]] && return; s="$(ask 'Listen seconds' '25')"; run "$PY" -m wamble.exploits.adv_harvest "$d" --timeout "$s"; }
 e_led(){
   local d; d="$(need_device)"; [[ -z $d ]] && return
   banner
   if ! confirm "Authorized: do you own '$d' / have permission?"; then
     printf '\n %sNot authorized — aborting.%s\n' "$YELLOW" "$RESET"; IFS= read -r _ </dev/tty; return
   fi
-  run "$PY" "$EXPLOITS/ble_led_unauth_control.py" "$d" --authorized --demo
+  run "$PY" -m wamble.exploits.led_unauth_control "$d" --authorized --demo
 }
 e_replay(){
   local d cap; d="$(need_device)"; [[ -z $d ]] && return
@@ -337,7 +339,7 @@ e_replay(){
   cap="$(ask 'Capture file to replay (path under captures/)')"
   [[ -z $cap ]] && return
   [[ -f $cap ]] || cap="$CAPTURES/$cap"
-  run "$PY" "$EXPLOITS/ble_replay.py" "$d" --authorized --from-capture "$cap"
+  run "$PY" -m wamble.exploits.replay "$d" --authorized --from-capture "$cap"
 }
 e_deface(){
   local d; d="$(need_device)"; [[ -z $d ]] && return
@@ -347,8 +349,8 @@ e_deface(){
   fi
   menu "Deface $d (Device Name -> PWNED!)" "deface (write PWNED!)" "restore original name" "← Back"
   case $REPLY_INDEX in
-    0) run "$PY" "$EXPLOITS/ble_deface.py" "$d" --authorized;;
-    1) run "$PY" "$EXPLOITS/ble_deface.py" "$d" --authorized --restore;;
+    0) run "$PY" -m wamble.exploits.deface "$d" --authorized;;
+    1) run "$PY" -m wamble.exploits.deface "$d" --authorized --restore;;
     *) return;;
   esac
 }
@@ -361,8 +363,8 @@ e_persist(){
   menu "Persistence phase for $d" "arm (set state, then power-cycle)" "verify (after reboot)" "← Back"
   case $REPLY_INDEX in
     0) local hex; hex="$(ask 'Value to persist, hex (known-valid!)')"; [[ -z $hex ]] && return
-       run "$PY" "$EXPLOITS/ble_persistence_test.py" arm "$d" --authorized --write "$hex";;
-    1) run "$PY" "$EXPLOITS/ble_persistence_test.py" verify "$d" --authorized;;
+       run "$PY" -m wamble.exploits.persistence_test arm "$d" --authorized --write "$hex";;
+    1) run "$PY" -m wamble.exploits.persistence_test verify "$d" --authorized;;
     *) return;;
   esac
 }
@@ -391,7 +393,7 @@ ctf_menu(){
   banner
   local dev; dev="$(ask 'CTF device name/address' 'M0DUL0CTF')"
   [[ -z $dev ]] && return
-  local C=("$PY" "$TOOLKIT/ble_ctf.py" -b "$dev")
+  local C=("$PY" -m wamble.ctf -b "$dev")
   while true; do
     menu "BLE CTF client — target: $dev" \
       "Enumerate (handles)" \
@@ -444,7 +446,7 @@ check_deps(){
     banner
     printf ' %sbleak/rich not available to %s%s\n\n' "$RED" "$PY" "$RESET"
     printf ' Create the venv first:\n\n   %scd %s\n   python3 -m venv .venv && source .venv/bin/activate\n   pip install -r requirements.txt%s\n\n' \
-      "$DIM" "$TOOLKIT" "$RESET"
+      "$DIM" "$HERE" "$RESET"
     printf ' Press Enter to continue anyway, or Ctrl-C to quit… '
     IFS= read -r _ </dev/tty
   fi

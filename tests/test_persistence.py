@@ -1,18 +1,11 @@
-"""Tests for the persistence verdict + state round-trip in BLE-Exploits.
+"""Tests for the persistence verdict + state round-trip in wamble.exploits.
 
 persistence_verdict decides whether an unauthenticated write survived a reboot,
 from either an automated readback or the operator's attestation. Getting the
 precedence and normalisation right is what makes the PoC's conclusion trustworthy.
 """
 
-import sys
-from pathlib import Path
-
-_EXPLOITS = Path(__file__).resolve().parent.parent / "BLE-Exploits"
-if str(_EXPLOITS) not in sys.path:
-    sys.path.insert(0, str(_EXPLOITS))
-
-from ble_persistence_test import (
+from wamble.exploits.persistence_test import (
     load_state,
     persistence_verdict,
     save_state,

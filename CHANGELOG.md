@@ -5,6 +5,17 @@ All notable changes to WAMBLE are recorded here. The format is based on
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once it starts
 tagging releases.
 
+## [Unreleased]
+
+### Changed
+
+- Reorganised the repository into a `src/` layout. The toolkit is now the
+  `wamble` package (`src/wamble/`, one module per tool), the exploit
+  demonstrations live in `wamble.exploits`, and the community-health docs moved
+  to `.github/` with reference docs under `docs/`. Tools now run as the
+  installed `wamble-*` commands or `python -m wamble.<tool>` rather than
+  `python3 <script>.py`. The menu front-ends and tests were updated to match.
+
 ## [0.1.1] - 2026-10-07
 
 ### Added

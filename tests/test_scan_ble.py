@@ -11,7 +11,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from scan_ble import (
+from wamble.scan import (
     CSV_FIELDS,
     build_device_record,
     csv_row,

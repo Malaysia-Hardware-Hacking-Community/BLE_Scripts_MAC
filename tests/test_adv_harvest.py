@@ -1,17 +1,10 @@
-"""Tests for the MiBeacon decoder in BLE-Exploits/ble_adv_harvest.py.
+"""Tests for the MiBeacon decoder in wamble.exploits.adv_harvest.
 
 Decoding the fe95 advertisement is pure byte work, so it is tested against the
 real frame captured from a Xiaomi Scale S400 during the live assessment.
 """
 
-import sys
-from pathlib import Path
-
-_EXPLOITS = Path(__file__).resolve().parent.parent / "BLE-Exploits"
-if str(_EXPLOITS) not in sys.path:
-    sys.path.insert(0, str(_EXPLOITS))
-
-from ble_adv_harvest import decode_mibeacon
+from wamble.exploits.adv_harvest import decode_mibeacon
 
 # The exact fe95 service-data captured live from "Xiaomi Scale S400 CEC9".
 REAL_FRAME = bytes.fromhex("1059d53b00c9ce63acea1c")
