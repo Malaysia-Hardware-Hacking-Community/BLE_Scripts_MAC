@@ -46,6 +46,7 @@ class TestConsoleScripts:
             "mtu": "wamble.mtu",
             "params": "wamble.params",
             "ctf": "wamble.ctf",
+            "export": "wamble.export",
         }
         for func, module_name in tool_modules.items():
             assert callable(getattr(cli, func)), func

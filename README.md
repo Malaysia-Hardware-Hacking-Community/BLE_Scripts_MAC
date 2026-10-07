@@ -107,6 +107,7 @@ is named in the first column), and every tool takes `--help`.
 | `wamble-mtu` ([`mtu`](src/wamble/mtu.py))                        | `gatttool -m`                          | Report the negotiated ATT MTU. Read-only; see [MTU](#mtu-and-connection-parameters).                                                   |
 | `wamble-params` ([`params`](src/wamble/params.py))               | `btmgmt conn-update`                   | Read or request the Peripheral Preferred Connection Parameters characteristic (`0x2A04`).                                              |
 | `wamble-ctf` ([`ctf`](src/wamble/ctf.py))                        | n/a                                    | Scriptable BLE CTF client (read/write/notify by handle). See below.                                                                   |
+| `wamble-export` ([`export`](src/wamble/export.py))               | n/a                                    | Dump the full GATT tree to JSON, or diff two dumps with `--diff` (offline). See [Export and diff](#export-and-diff).                   |
 | `wamble-targets` ([`targets`](src/wamble/targets.py))            | n/a                                    | Save short aliases for devices (`@name`), so any connecting tool can target them. See [Target profiles](#target-profiles).             |
 | [`wamble.common`](src/wamble/common.py), [`wamble.gatt`](src/wamble/gatt.py) | n/a                        | Shared libraries. Not entry points.                                                                                                    |
 
@@ -168,6 +169,22 @@ wamble-find "Acme Tracker" 2902 --target descr
 wamble-device-info "Acme Tracker"
 wamble-battery "Acme Tracker"
 ```
+
+### Export and diff
+
+Snapshot a device's whole GATT tree to JSON, then compare two snapshots offline
+(handy for spotting what a firmware update changed, or how two units differ):
+
+```bash
+wamble-export "Acme Tracker"                       # print the GATT tree as JSON
+wamble-export "Acme Tracker" -o before.json        # save a snapshot
+wamble-export "Acme Tracker" -o after.json         # ...and another later
+wamble-export --diff before.json after.json        # what changed (no device needed)
+```
+
+The diff reports services and characteristics added or removed, descriptors
+added or removed, and characteristic properties that changed. The snapshot is
+sorted and stable, so re-exporting the same device diffs clean.
 
 ### Target profiles
 
