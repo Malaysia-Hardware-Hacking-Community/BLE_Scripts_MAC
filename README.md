@@ -107,7 +107,7 @@ is named in the first column), and every tool takes `--help`.
 | `wamble-mtu` ([`mtu`](src/wamble/mtu.py))                        | `gatttool -m`                          | Report the negotiated ATT MTU. Read-only; see [MTU](#mtu-and-connection-parameters).                                                   |
 | `wamble-params` ([`params`](src/wamble/params.py))               | `btmgmt conn-update`                   | Read or request the Peripheral Preferred Connection Parameters characteristic (`0x2A04`).                                              |
 | `wamble-ctf` ([`ctf`](src/wamble/ctf.py))                        | n/a                                    | Scriptable BLE CTF client (read/write/notify by handle). See below.                                                                   |
-| [`wamble.targets`](src/wamble/targets.py)                        | n/a                                    | Save short aliases for devices (`@name`), so any connecting tool can target them. See [Target profiles](#target-profiles).             |
+| `wamble-targets` ([`targets`](src/wamble/targets.py))            | n/a                                    | Save short aliases for devices (`@name`), so any connecting tool can target them. See [Target profiles](#target-profiles).             |
 | [`wamble.common`](src/wamble/common.py), [`wamble.gatt`](src/wamble/gatt.py) | n/a                        | Shared libraries. Not entry points.                                                                                                    |
 
 ## Usage
@@ -176,19 +176,19 @@ the address is a long per-host UUID that changes between reboots. Save a short
 alias once, then target it with `@name` from any connecting tool:
 
 ```bash
-python -m wamble.targets add tv "[TV] Samsung Q60 Series"   # save an alias
-python -m wamble.targets add led "GBK_H619A"
-python -m wamble.targets list                               # show saved aliases
-wamble-enum @tv                                             # use it anywhere
+wamble-targets add tv "[TV] Samsung Q60 Series"   # save an alias
+wamble-targets add led "GBK_H619A"
+wamble-targets list                               # show saved aliases
+wamble-enum @tv                                   # use it anywhere
 wamble-battery @led
-python -m wamble.targets remove tv                          # delete an alias
-python -m wamble.targets path                               # where the file lives
+wamble-targets remove tv                          # delete an alias
+wamble-targets path                               # where the file lives
 ```
 
 An alias maps to whatever you would otherwise type: a name substring or an
-address. Aliases are stored in a small JSON file (run `python -m wamble.targets
-path` to see where). An unknown `@name` is reported as "not found", the same as
-any other target that is not nearby.
+address. Aliases are stored in a small JSON file (run `wamble-targets path` to
+see where). An unknown `@name` is reported as "not found", the same as any other
+target that is not nearby.
 
 ## Menu TUI, exploits, and CTF client
 
