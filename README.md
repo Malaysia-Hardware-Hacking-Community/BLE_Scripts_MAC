@@ -100,6 +100,7 @@ is named in the first column), and every tool takes `--help`.
 | `wamble-scan` ([`scan`](src/wamble/scan.py))                     | `bluetoothctl scan on`, `hcitool scan` | Scan advertisements for a fixed window. Filter by name, service UUID or RSSI. Optionally dump JSON or CSV.                             |
 | `wamble-watch` ([`watch`](src/wamble/watch.py))                  | `btmon`                                | Live-refreshing view of advertisements, strongest signal first, until interrupted.                                                     |
 | `wamble-adv-log` ([`adv_log`](src/wamble/adv_log.py))            | n/a                                    | Log advertisements to CSV over time (one timestamped row per sighting). See [Logging advertisements](#logging-advertisements-over-time). |
+| `wamble-notify-log` ([`notify_log`](src/wamble/notify_log.py))   | n/a                                    | Subscribe to a device's notifications and log each one to CSV with timestamps. See [Logging notifications](#logging-notifications).    |
 | `wamble-enum` ([`enum`](src/wamble/enum.py))                     | `gatttool -a`                          | Connect, list every service, characteristic and descriptor, and optionally read, list writable, or subscribe. Has a CTF-oriented mode. |
 | `wamble-gatt` ([`interactive`](src/wamble/interactive.py))       | `gatttool` interactive mode            | REPL: read, write, subscribe and unsubscribe against a live connection. See the [cheatsheet](docs/GATT-CLI-CHEATSHEET.md).            |
 | `wamble-find` ([`find`](src/wamble/find.py))                     | `gatttool find`                        | Find characteristics or descriptors by UUID substring.                                                                                 |
@@ -151,6 +152,22 @@ wamble-adv-log -n Fitbit --min-interval 5 # one row per matching device per 5s
 Columns are `timestamp, address, name, rssi, service_uuids, manufacturer`. With
 no `-o` the CSV goes to stdout (status stays on stderr) so it pipes cleanly, and
 `--min-interval` throttles how often each device is logged.
+
+### Logging notifications
+
+`wamble-notify-log` subscribes to a connected device's notify/indicate
+characteristics and appends a timestamped CSV row per notification, so you can
+capture a sensor's stream to a file:
+
+```bash
+wamble-notify-log "HR Monitor" -o hr.csv            # all notify/indicate chars
+wamble-notify-log "HR Monitor" -c 2a37 --timeout 60 # just one, for a minute
+```
+
+Columns are `timestamp, elapsed, characteristic, handle, length, value_hex,
+text` (the `text` column shows a printable rendering when the bytes are text).
+By default it subscribes to every notify/indicate characteristic; name specific
+ones with repeated `-c`.
 
 ### Enumerating GATT attributes
 

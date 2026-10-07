@@ -48,6 +48,7 @@ class TestConsoleScripts:
             "ctf": "wamble.ctf",
             "export": "wamble.export",
             "adv_log": "wamble.adv_log",
+            "notify_log": "wamble.notify_log",
         }
         for func, module_name in tool_modules.items():
             assert callable(getattr(cli, func)), func

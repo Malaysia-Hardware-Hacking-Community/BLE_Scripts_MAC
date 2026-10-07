@@ -9,6 +9,11 @@ tagging releases.
 
 ### Added
 
+- `wamble-notify-log`: subscribe to a device's notify/indicate characteristics
+  and log each notification to CSV with timestamps (`timestamp, elapsed,
+  characteristic, handle, length, value_hex, text`). Subscribes to all
+  notifiable characteristics by default, or named ones with repeated `-c`, and
+  runs until Ctrl-C or `--timeout`.
 - `wamble-adv-log`: log BLE advertisements to CSV over time, one timestamped row
   per sighting (`timestamp, address, name, rssi, service_uuids, manufacturer`),
   until Ctrl-C or `--timeout`. Writes to a file with `-o` or to stdout for

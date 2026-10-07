@@ -38,6 +38,7 @@ wamble-params = "wamble.cli:params"
 wamble-ctf = "wamble.cli:ctf"
 wamble-export = "wamble.cli:export"
 wamble-adv-log = "wamble.cli:adv_log"
+wamble-notify-log = "wamble.cli:notify_log"
 wamble-targets = "wamble.cli:targets"
 
 [tool.setuptools.packages.find]
