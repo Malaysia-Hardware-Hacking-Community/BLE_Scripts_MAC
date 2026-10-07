@@ -5,7 +5,7 @@ All notable changes to WAMBLE are recorded here. The format is based on
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once it starts
 tagging releases.
 
-## [Unreleased]
+## [0.1.1] - 2026-10-07
 
 ### Added
 
