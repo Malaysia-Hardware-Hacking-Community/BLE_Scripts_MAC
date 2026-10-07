@@ -5,6 +5,19 @@ All notable changes to WAMBLE are recorded here. The format is based on
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once it starts
 tagging releases.
 
+## [Unreleased]
+
+### Added
+
+- The project can be installed (`pip install .`) to expose each tool as a
+  `wamble-*` console command: `wamble-scan`, `wamble-watch`, `wamble-enum`,
+  `wamble-gatt`, `wamble-find`, `wamble-battery`, `wamble-device-info`,
+  `wamble-mtu`, `wamble-params` and `wamble-ctf`. Each runs the same code as its
+  script, which still runs directly with no install step.
+- `pyproject.toml` now carries the packaging metadata (`[project]`,
+  `[project.scripts]`, `[build-system]`) and `wamble_cli.py` holds the thin
+  entry-point wrappers.
+
 ## [0.1.0] - 2026-10-07
 
 ### Added

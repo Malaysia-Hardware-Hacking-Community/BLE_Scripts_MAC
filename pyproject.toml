@@ -1,5 +1,61 @@
-# Tooling configuration for WAMBLE. There is no build step; the scripts run
-# directly. This file holds the strict lint rules the CI enforces.
+# Packaging and tooling configuration for WAMBLE. Each script still runs
+# directly (``python3 scan_ble.py``); installing the project additionally
+# exposes the tools as ``wamble-*`` commands. This file also holds the strict
+# lint rules the CI enforces.
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wamble"
+version = "0.1.0"
+description = "Windows And Mac BLE: gatttool-style BLE tooling for macOS and Windows."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{ name = "Malaysia Hardware Hacking Community" }]
+keywords = ["bluetooth", "ble", "gatt", "bleak", "gatttool", "security"]
+dependencies = [
+    "bleak>=3.0.2,<4",
+    "rich>=13.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/Malaysia-Hardware-Hacking-Community/WAMBLE"
+Issues = "https://github.com/Malaysia-Hardware-Hacking-Community/WAMBLE/issues"
+
+[project.scripts]
+wamble-scan = "wamble_cli:scan"
+wamble-watch = "wamble_cli:watch"
+wamble-enum = "wamble_cli:enum"
+wamble-gatt = "wamble_cli:gatt"
+wamble-find = "wamble_cli:find"
+wamble-battery = "wamble_cli:battery"
+wamble-device-info = "wamble_cli:device_info"
+wamble-mtu = "wamble_cli:mtu"
+wamble-params = "wamble_cli:params"
+wamble-ctf = "wamble_cli:ctf"
+
+[tool.setuptools]
+# Flat layout: the toolkit is a set of top-level modules, not a package. List
+# them explicitly so the build does not try (and fail) to auto-discover a
+# package among the scripts, tests, and BLE-Exploits folder.
+py-modules = [
+    "wamble_cli",
+    "ble_common",
+    "ble_gatt",
+    "scan_ble",
+    "watch_ble",
+    "enum_ble",
+    "gatt_cli",
+    "gatt_find",
+    "gatt_battery",
+    "read_device_info",
+    "gatt_mtu",
+    "gatt_params",
+    "ble_ctf",
+]
 
 [tool.ruff]
 target-version = "py311"
