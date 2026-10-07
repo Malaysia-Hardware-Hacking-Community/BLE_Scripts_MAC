@@ -22,6 +22,14 @@ tagging releases.
   alongside the existing `--write-to` JSON export. The two options can be given
   together and share the same per-device fields (address, name, RSSI, local
   name, advertised service UUIDs, manufacturer data, service data).
+- The project can be installed (`pip install .`) to expose each tool as a
+  `wamble-*` console command: `wamble-scan`, `wamble-watch`, `wamble-enum`,
+  `wamble-gatt`, `wamble-find`, `wamble-battery`, `wamble-device-info`,
+  `wamble-mtu`, `wamble-params` and `wamble-ctf`. Each runs the same code as its
+  script, which still runs directly with no install step.
+- `pyproject.toml` now carries the packaging metadata (`[project]`,
+  `[project.scripts]`, `[build-system]`) and `wamble_cli.py` holds the thin
+  entry-point wrappers.
 
 ### Fixed
 

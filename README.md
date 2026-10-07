@@ -69,6 +69,21 @@ If PowerShell blocks the activate script, allow it for the session with
 `Set-ExecutionPolicy -Scope Process RemoteSigned`. Use `python` (or `py`) in
 place of `python3` in the examples below.
 
+### Install as commands (optional)
+
+The scripts run directly as shown below, with no install step. If you prefer to
+call them from anywhere as `wamble-*` commands, install the project into your
+environment:
+
+```bash
+pip install .            # or: pip install -e .  (editable, for development)
+```
+
+This adds `wamble-scan`, `wamble-watch`, `wamble-enum`, `wamble-gatt`,
+`wamble-find`, `wamble-battery`, `wamble-device-info`, `wamble-mtu`,
+`wamble-params` and `wamble-ctf`, each the same as running its script. For
+example, `wamble-scan -t 15` is `python3 scan_ble.py -t 15`.
+
 ## Quick start
 
 ```bash
