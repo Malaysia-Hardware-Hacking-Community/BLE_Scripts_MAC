@@ -103,6 +103,7 @@ is named in the first column), and every tool takes `--help`.
 | `wamble-notify-log` ([`notify_log`](src/wamble/notify_log.py))   | n/a                                    | Subscribe to a device's notifications and log each one to CSV with timestamps. See [Logging notifications](#logging-notifications).    |
 | `wamble-enum` ([`enum`](src/wamble/enum.py))                     | `gatttool -a`                          | Connect, list every service, characteristic and descriptor, and optionally read, list writable, or subscribe. Has a CTF-oriented mode. |
 | `wamble-gatt` ([`interactive`](src/wamble/interactive.py))       | `gatttool` interactive mode            | REPL: read, write, subscribe and unsubscribe against a live connection. See the [cheatsheet](docs/GATT-CLI-CHEATSHEET.md).            |
+| `wamble-batch` ([`batch`](src/wamble/batch.py))                  | `gatttool` scripting                   | Run a script of the same GATT commands non-interactively, from a file or stdin. See [Scripting](#scripting-batch-commands).            |
 | `wamble-find` ([`find`](src/wamble/find.py))                     | `gatttool find`                        | Find characteristics or descriptors by UUID substring.                                                                                 |
 | `wamble-battery` ([`battery`](src/wamble/battery.py))            | `gatttool -t Random -n 0x180f`         | Read the standard Battery Level characteristic (`0x2A19`).                                                                             |
 | `wamble-device-info` ([`device_info`](src/wamble/device_info.py))| n/a                                    | Read the Device Information Service (`0x180A`): model, serial, firmware, hardware revisions.                                           |
@@ -201,6 +202,29 @@ Commands: `services`, `characteristics`, `descriptors`, `read`, `write-req`,
 read, write and subscribe commands take a UUID substring or a handle, matched
 case-insensitively. The [cheatsheet](docs/GATT-CLI-CHEATSHEET.md) explains each
 command and how to build payloads.
+
+### Scripting (batch commands)
+
+`wamble-batch` runs the same commands from a file (or stdin) instead of the
+prompt, against one connection, then disconnects. It adds a `wait <seconds>`
+line for holding the link open, which is useful after `notify` to capture a few
+updates:
+
+```bash
+wamble-batch "Device Name" script.txt
+cat script.txt | wamble-batch "Device Name" -      # read the script from stdin
+```
+
+```
+# script.txt — same commands as the prompt, plus wait
+services
+write-cmd 00010203-0405-0607-0809-0a0b0c0d2b11 3305020000...
+notify 2a37
+wait 5
+quit
+```
+
+Blank lines are skipped and anything after `#` is a comment.
 
 ### Finding a UUID, device info, battery
 

@@ -96,6 +96,12 @@ def export() -> None:
     _run(main)
 
 
+def batch() -> None:
+    from wamble.batch import main
+
+    _run(main)
+
+
 def adv_log() -> None:
     from wamble.adv_log import main
 

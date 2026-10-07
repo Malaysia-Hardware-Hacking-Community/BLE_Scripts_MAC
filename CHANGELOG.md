@@ -9,6 +9,10 @@ tagging releases.
 
 ### Added
 
+- `wamble-batch`: run a script of GATT commands non-interactively, from a file
+  or stdin, against one connection. It uses exactly the same commands as
+  `wamble-gatt` (reusing its dispatcher), plus a `wait <seconds>` line for
+  holding the link open, for example to capture notifications after `notify`.
 - Advertisement identification. `wamble-scan` and `wamble-watch` now say what an
   unnamed device actually is: they decode the manufacturer company ID to a vendor
   name (a curated subset of the Bluetooth SIG list, e.g. Apple, Samsung, Google,
