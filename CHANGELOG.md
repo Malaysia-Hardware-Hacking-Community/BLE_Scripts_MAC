@@ -7,6 +7,11 @@ tagging releases.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-08
+
+Tier 3: connection/performance and signal tooling, OS-driven pairing, and an
+authorized GATT fuzzer. See `docs/ROADMAP.md`.
+
 ### Added
 
 - `wamble.exploits.gatt_fuzz`: an authorized, own-device GATT write fuzzer (Exploit
