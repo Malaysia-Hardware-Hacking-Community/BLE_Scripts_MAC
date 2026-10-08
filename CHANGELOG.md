@@ -7,6 +7,17 @@ tagging releases.
 
 ## [Unreleased]
 
+### Added
+
+- `wamble-bench`: benchmark a device's connection performance. Times connection
+  establishment over repeated samples (min/median/mean/max), reports connect
+  reliability and the negotiated ATT MTU, and measures read and notification
+  throughput over a window. Uses only cross-platform `bleak` calls, so it behaves
+  the same on macOS and Windows. First feature of Tier 3 (see `docs/ROADMAP.md`).
+- `docs/ROADMAP.md`: the living 4-tier feature plan (shipped Tiers 1-2, proposed
+  Tier 3, and the out-of-scope Tier 4 boundary, including why BlueZ-style explicit
+  pairing needs a bring-your-own-radio backend on macOS/Windows).
+
 ## [0.1.3] - 2026-10-08
 
 ### Fixed

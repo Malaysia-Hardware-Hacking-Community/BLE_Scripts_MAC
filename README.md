@@ -112,6 +112,7 @@ is named in the first column), and every tool takes `--help`.
 | `wamble-params` ([`params`](src/wamble/params.py))               | `btmgmt conn-update`                   | Read or request the Peripheral Preferred Connection Parameters characteristic (`0x2A04`).                                              |
 | `wamble-ctf` ([`ctf`](src/wamble/ctf.py))                        | n/a                                    | Scriptable BLE CTF client (read/write/notify by handle). See below.                                                                   |
 | `wamble-export` ([`export`](src/wamble/export.py))               | n/a                                    | Dump the full GATT tree to JSON, or diff two dumps with `--diff` (offline). See [Export and diff](#export-and-diff).                   |
+| `wamble-bench` ([`bench`](src/wamble/bench.py))                  | n/a                                    | Benchmark connection time, ATT MTU, and read/notify throughput over repeated samples. See [Benchmarking](#benchmarking).               |
 | `wamble-targets` ([`targets`](src/wamble/targets.py))            | n/a                                    | Save short aliases for devices (`@name`), so any connecting tool can target them. See [Target profiles](#target-profiles).             |
 | [`wamble.common`](src/wamble/common.py), [`wamble.gatt`](src/wamble/gatt.py) | n/a                        | Shared libraries. Not entry points.                                                                                                    |
 
@@ -280,6 +281,26 @@ wamble-export --diff before.json after.json        # what changed (no device nee
 The diff reports services and characteristics added or removed, descriptors
 added or removed, and characteristic properties that changed. The snapshot is
 sorted and stable, so re-exporting the same device diffs clean.
+
+### Benchmarking
+
+Measure how a link actually performs, which is useful for diagnosing a flaky or
+slow device:
+
+```bash
+wamble-bench "Acme Tracker"                       # 5 connects + 3s read throughput
+wamble-bench "Acme Tracker" -n 10                 # 10 connection samples
+wamble-bench "Acme Tracker" --read-seconds 0      # skip the read throughput phase
+wamble-bench "Acme Tracker" --notify-seconds 5    # also measure notifications/sec
+wamble-bench "Acme Tracker" --read-char 2a37      # read a specific characteristic
+```
+
+It reports connection time (min/median/mean/max) over the samples, how many
+connects succeeded, the negotiated ATT MTU, and read/notification throughput. By
+default it reads the first readable characteristic; a device is free to refuse a
+read, in which case that phase stops early and the rest of the report still
+prints. It uses only cross-platform `bleak` calls, so it works the same on macOS
+and Windows.
 
 ### Target profiles
 

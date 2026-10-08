@@ -96,6 +96,12 @@ def export() -> None:
     _run(main)
 
 
+def bench() -> None:
+    from wamble.bench import main
+
+    _run(main)
+
+
 def batch() -> None:
     from wamble.batch import main
 
