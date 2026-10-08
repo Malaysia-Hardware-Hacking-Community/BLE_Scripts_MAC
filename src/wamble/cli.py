@@ -102,6 +102,14 @@ def bench() -> None:
     _run(main)
 
 
+def range_monitor() -> None:
+    # Named range_monitor, not range, so it does not shadow the builtin in this
+    # module. The command is still wamble-range (see pyproject [project.scripts]).
+    from wamble.range import main
+
+    _run(main, "Stopped.")
+
+
 def batch() -> None:
     from wamble.batch import main
 

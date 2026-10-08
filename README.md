@@ -113,6 +113,7 @@ is named in the first column), and every tool takes `--help`.
 | `wamble-ctf` ([`ctf`](src/wamble/ctf.py))                        | n/a                                    | Scriptable BLE CTF client (read/write/notify by handle). See below.                                                                   |
 | `wamble-export` ([`export`](src/wamble/export.py))               | n/a                                    | Dump the full GATT tree to JSON, or diff two dumps with `--diff` (offline). See [Export and diff](#export-and-diff).                   |
 | `wamble-bench` ([`bench`](src/wamble/bench.py))                  | n/a                                    | Benchmark connection time, ATT MTU, and read/notify throughput over repeated samples. See [Benchmarking](#benchmarking).               |
+| `wamble-range` ([`range`](src/wamble/range.py))                  | n/a                                    | Track a device's RSSI live (sparkline, warmer/cooler, rough distance) to locate it. See [Tracking a device's signal](#tracking-a-devices-signal). |
 | `wamble-targets` ([`targets`](src/wamble/targets.py))            | n/a                                    | Save short aliases for devices (`@name`), so any connecting tool can target them. See [Target profiles](#target-profiles).             |
 | [`wamble.common`](src/wamble/common.py), [`wamble.gatt`](src/wamble/gatt.py) | n/a                        | Shared libraries. Not entry points.                                                                                                    |
 
@@ -301,6 +302,25 @@ default it reads the first readable characteristic; a device is free to refuse a
 read, in which case that phase stops early and the rest of the report still
 prints. It uses only cross-platform `bleak` calls, so it works the same on macOS
 and Windows.
+
+### Tracking a device's signal
+
+Follow one device's signal strength to physically locate it, like a
+"hotter / colder" game:
+
+```bash
+wamble-range "Acme Tag"                      # live RSSI until Ctrl-C
+wamble-range "Acme Tag" --timeout 60         # stop after a minute
+wamble-range "Acme Tag" --tx-power -65       # calibrate the 1 m reference RSSI
+wamble-range "Acme Tag" --path-loss 3.0      # indoor environment exponent
+```
+
+It shows the current RSSI, a sparkline of recent samples, a warmer/cooler trend
+(so you know if you are closing in), and a rough distance estimate. The distance
+is a guide, not a measurement: BLE RSSI is noisy, so calibrate `--tx-power` (the
+RSSI at one metre) and `--path-loss` for your device and surroundings. It reads
+the advertisement RSSI the scanner reports, so it works the same on macOS and
+Windows.
 
 ### Target profiles
 

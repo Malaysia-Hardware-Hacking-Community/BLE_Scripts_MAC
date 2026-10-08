@@ -9,6 +9,10 @@ tagging releases.
 
 ### Added
 
+- `wamble-range`: track one device's RSSI live as a "hotter / colder" finder, with
+  a sparkline of recent samples, a coarse signal label, a warmer/cooler trend, and
+  a rough log-distance estimate. Reads the per-advertisement RSSI the scanner
+  already reports, so it behaves the same on macOS and Windows. Tier 3.
 - `wamble-bench`: benchmark a device's connection performance. Times connection
   establishment over repeated samples (min/median/mean/max), reports connect
   reliability and the negotiated ATT MTU, and measures read and notification
