@@ -49,6 +49,7 @@ class TestConsoleScripts:
             "export": "wamble.export",
             "bench": "wamble.bench",
             "range_monitor": "wamble.range",
+            "pair": "wamble.pair",
             "batch": "wamble.batch",
             "profile": "wamble.profiles",
             "adv_log": "wamble.adv_log",

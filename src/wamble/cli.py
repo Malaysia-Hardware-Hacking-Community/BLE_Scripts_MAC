@@ -110,6 +110,12 @@ def range_monitor() -> None:
     _run(main, "Stopped.")
 
 
+def pair() -> None:
+    from wamble.pair import main
+
+    _run(main)
+
+
 def batch() -> None:
     from wamble.batch import main
 

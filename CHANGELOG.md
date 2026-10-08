@@ -9,6 +9,13 @@ tagging releases.
 
 ### Added
 
+- `wamble-pair`: pair or unpair a device via the OS. On Windows it uses the WinRT
+  pairing API (`bleak.pair()`/`unpair()`); on macOS, which has no explicit pairing
+  API, it triggers CoreBluetooth's auto-pairing by reading an encryption-protected
+  characteristic given with `--char`, and directs you to System Settings for
+  unpairing. WAMBLE does not implement SMP itself (no OS exposes the raw channel to
+  apps on the target platforms); it drives the OS pairing and reports the outcome.
+  Tier 3.
 - `wamble-range`: track one device's RSSI live as a "hotter / colder" finder, with
   a sparkline of recent samples, a coarse signal label, a warmer/cooler trend, and
   a rough log-distance estimate. Reads the per-advertisement RSSI the scanner
