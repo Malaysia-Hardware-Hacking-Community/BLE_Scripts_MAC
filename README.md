@@ -148,6 +148,12 @@ string lives is the Device Information Service, which you read by connecting, so
 `wamble-enum` prints a `Device:` line with the manufacturer and model when the
 device exposes it (many accessories and IoT devices do; phones do not).
 
+Once `wamble-enum` has read that model string, it remembers it against the device
+address, so the next `wamble-scan` or `wamble-watch` labels that same device with
+what you enumerated it as instead of showing `(unnamed)` again. The advertised
+name always wins when present; the learned name only fills a blank. The cache is
+`identities.json` next to the targets file, overridable with `$WAMBLE_IDENTITIES`.
+
 ### Watching advertisements live
 
 ```bash

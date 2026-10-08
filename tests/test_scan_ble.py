@@ -104,6 +104,23 @@ class TestBuildDeviceRecord:
         adv = self._adv(service_uuids=["0000180f-0000-1000-8000-00805f9b34fb"])
         assert build_device_record("AA:BB", dev, adv)["service_uuids"] == ["180f"]
 
+    def test_display_uses_advertised_name(self, tmp_path, monkeypatch):
+        # "display" is the label a UI shows; the advertised name wins.
+        monkeypatch.setenv("WAMBLE_IDENTITIES", str(tmp_path / "id.json"))
+        dev = SimpleNamespace(name="Acme", address="AA:BB")
+        assert build_device_record("AA:BB", dev, self._adv())["display"] == "Acme"
+
+    def test_display_falls_back_to_learned_identity(self, tmp_path, monkeypatch):
+        # An unnamed device gets the identity a past enum learned for its address.
+        monkeypatch.setenv("WAMBLE_IDENTITIES", str(tmp_path / "id.json"))
+        from wamble.common import remember_identity
+
+        remember_identity("AA:BB", "Polar H10")
+        dev = SimpleNamespace(name=None, address="AA:BB")
+        rec = build_device_record("AA:BB", dev, self._adv())
+        assert rec["name"] == "(unnamed)"  # raw name is unchanged
+        assert rec["display"] == "Polar H10"  # UI label reflects the enum
+
     def test_rssi_is_passed_through(self):
         dev = SimpleNamespace(name="x", address="AA:BB")
         assert build_device_record("AA:BB", dev, self._adv(rssi=-70))["rssi"] == -70
@@ -166,7 +183,7 @@ class TestWriteCsv:
         path = tmp_path / "scan.csv"
         write_csv(str(path), records)
 
-        with open(path, newline="") as f:
+        with open(path, newline="", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             assert reader.fieldnames == CSV_FIELDS
             rows = list(reader)

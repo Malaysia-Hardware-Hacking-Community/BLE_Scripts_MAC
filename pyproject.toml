@@ -9,7 +9,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wamble"
-version = "0.1.2"
+# Single source of truth: the version is read from ``wamble.__version__`` (see
+# [tool.setuptools.dynamic] below), so it is only ever edited in one file,
+# src/wamble/__init__.py, and the packaging metadata, the TUIs and the docs all
+# follow from there.
+dynamic = ["version"]
 description = "Windows And Mac BLE: gatttool-style BLE tooling for macOS and Windows."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -42,6 +46,10 @@ wamble-profile = "wamble.cli:profile"
 wamble-adv-log = "wamble.cli:adv_log"
 wamble-notify-log = "wamble.cli:notify_log"
 wamble-targets = "wamble.cli:targets"
+
+[tool.setuptools.dynamic]
+# Read the project version statically from the package's __version__ literal.
+version = { attr = "wamble.__version__" }
 
 [tool.setuptools.packages.find]
 # src layout: the toolkit is the ``wamble`` package (and its ``exploits``

@@ -13,6 +13,7 @@ from wamble.common import (
     fmt_bytes,
     format_properties,
     is_gatt_refusal,
+    remember_identity,
     short_uuid,
     show_value,
     uuid_name,
@@ -107,6 +108,9 @@ async def main():  # noqa: C901
         identity = await read_identity(client)
         if identity:
             console.print(f"[bold]Device:[/bold] {identity}")
+            # Cache it against this address so a later scan or watch can label an
+            # otherwise "(unnamed)" row with what this enumeration found it to be.
+            remember_identity(client.address, identity)
 
         # Number of active notify/indicate subscriptions. Defined up front so the
         # end-of-run wait loop can reference it whether or not --notify was given.

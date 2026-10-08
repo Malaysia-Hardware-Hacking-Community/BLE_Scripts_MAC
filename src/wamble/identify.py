@@ -13,7 +13,7 @@ guessed at.
 
 from typing import Any
 
-from wamble.common import fmt_bytes
+from wamble.common import fmt_bytes, learned_identity
 
 #: Curated Bluetooth SIG company identifiers (company ID -> name). Common
 #: consumer vendors only; extend as needed.
@@ -214,6 +214,30 @@ def identify(adv: Any) -> str:
     detail = apple_detail(adv) or beacon_label(adv)
     parts = [p for p in (vendor_label(adv), detail) if p]
     return " · ".join(dict.fromkeys(parts))
+
+
+def display_name(device: Any, adv: Any) -> str:
+    """The best available human label for a device row.
+
+    Precedence, strongest first:
+
+    1. the live advertised name (``device.name`` or ``adv.local_name``);
+    2. an identity learned from a previous ``wamble-enum`` of this address, read
+       from its Device Information Service and cached (see
+       :func:`wamble.common.remember_identity`) - this is what makes the scan
+       list reflect what you enumerated;
+    3. a derived vendor/beacon label from :func:`identify`, prefixed with "." to
+       mark it as inferred rather than reported;
+    4. ``"(unnamed)"`` when nothing above applies.
+    """
+    name = device.name or adv.local_name
+    if name:
+        return name
+    learned = learned_identity(getattr(device, "address", ""))
+    if learned:
+        return learned
+    derived = identify(adv)
+    return f"\N{MIDDLE DOT} {derived}" if derived else "(unnamed)"
 
 
 def decode_manufacturer(adv: Any) -> str:

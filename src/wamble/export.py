@@ -164,7 +164,7 @@ def render_diff(diff: dict) -> None:
 
 def load_tree(path: str) -> dict:
     """Load a snapshot JSON file."""
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -189,7 +189,7 @@ async def run_export(args: argparse.Namespace) -> None:
 
     text = json.dumps(tree, indent=2)
     if args.output:
-        with open(args.output, "w") as f:
+        with open(args.output, "w", encoding="utf-8") as f:
             f.write(text + "\n")
         console.print(f"[green]GATT snapshot written to {args.output}[/green]")
     else:

@@ -10,7 +10,7 @@ from rich.console import Console
 from rich.table import Table
 
 from wamble.common import parse_advertisement_data, short_uuid, uuid_name
-from wamble.identify import decode_manufacturer, identify
+from wamble.identify import decode_manufacturer, display_name
 
 console = Console()
 
@@ -85,11 +85,10 @@ def make_table(
         # Parse advertisement data
         adv_data = parse_advertisement_data(adv)
 
-        # Fall back to a derived identity (vendor and/or beacon) for a device
-        # that advertises no name, so "(unnamed)" rows say what they really are.
-        name = device.name or adv.local_name
-        if not name:
-            name = f"· {identify(adv)}" if identify(adv) else "(unnamed)"
+        # The best label we have: the advertised name, else what a past enum
+        # learned for this address, else a derived vendor/beacon identity, so
+        # "(unnamed)" rows say what they really are.
+        name = display_name(device, adv)
 
         # Format service UUIDs, naming the known ones (16-bit and 128-bit alike).
         adv_uuids = adv.service_uuids or []
@@ -141,6 +140,10 @@ def build_device_record(address: str, device: Any, adv: Any) -> dict:
     return {
         "address": address,
         "name": device.name or adv.local_name or "(unnamed)",
+        # The best label for a UI to show: advertised name, else a past enum's
+        # learned identity, else a derived vendor/beacon identity. Kept separate
+        # from "name" so the raw advertised name stays available and stable.
+        "display": display_name(device, adv),
         "rssi": adv.rssi,
         "local_name": adv.local_name,
         "service_uuids": adv_data["service_uuids"],
@@ -168,8 +171,10 @@ def csv_row(record: dict) -> dict:
 
 def write_csv(path: str, records: list[dict]) -> None:
     """Write device records to *path* as CSV with a header row."""
-    with open(path, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=CSV_FIELDS)
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        # extrasaction="ignore" so a record may carry extra keys (e.g. "display")
+        # without forcing them into the stable CSV column set.
+        writer = csv.DictWriter(f, fieldnames=CSV_FIELDS, extrasaction="ignore")
         writer.writeheader()
         for record in records:
             writer.writerow(csv_row(record))
@@ -203,7 +208,7 @@ def write_exports(
             "device_count": len(records),
             "devices": records,
         }
-        with open(json_path, "w") as f:
+        with open(json_path, "w", encoding="utf-8") as f:
             json.dump(output, f, indent=2)
         console.print(f"[green]Discovery data written to {json_path}[/green]")
 
@@ -296,9 +301,7 @@ async def main():
     else:
         if args.plain:
             for index, (address, device, adv) in enumerate(rows, 1):
-                name = device.name or adv.local_name
-                if not name:
-                    name = f"· {identify(adv)}" if identify(adv) else "(unnamed)"
+                name = display_name(device, adv)
                 rssi = adv.rssi if adv.rssi is not None else "—"
                 print(f"{index}. {name} [{address}] RSSI: {rssi}")
         else:

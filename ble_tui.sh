@@ -19,9 +19,11 @@ CAPTURES="$SRC/wamble/exploits/captures"
 # Make the wamble package importable for `python -m wamble.*`, whether or not the
 # project has been pip-installed. (An editable install points here anyway.)
 export PYTHONPATH="$SRC${PYTHONPATH:+:$PYTHONPATH}"
-# Scan results are cached here so one scan can feed many actions (see
-# pick_device). Per-PID path keeps concurrent TUIs from clobbering each other.
-SCAN_CACHE="${TMPDIR:-/tmp}/wamble_scan.$$.json"
+# Scan results are saved inside the project (scans/) rather than a hidden temp
+# dir, so they are easy to find, reuse across runs, and clear from the TUI. The
+# device picker reads the most recent scan; "Delete saved scans" empties the dir.
+SCANS_DIR="$HERE/scans"
+mkdir -p "$SCANS_DIR" 2>/dev/null || true
 SCAN_SECONDS=8   # default scan duration for the picker
 
 if [[ -x "$HERE/.venv/bin/python" ]]; then
@@ -40,7 +42,10 @@ if [[ -t 1 ]]; then
 else
   RESET=''; BOLD=''; DIM=''; CYAN=''; GREEN=''; YELLOW=''; RED=''; MAGENTA=''; BLUE=''; HL=''; EL=''
 fi
-VERSION="0.1.2"
+# Single source of truth: read the package version so this launcher never drifts
+# from pyproject.toml / src/wamble/__init__.py. PY and PYTHONPATH are set above,
+# so this works whether or not the project has been pip-installed.
+VERSION="$("$PY" -c 'import wamble; print(wamble.__version__)' 2>/dev/null || echo '?')"
 MIN_W=40   # narrowest the panel is allowed to get
 MAX_W=72   # widest it will grow, so lines stay readable on a big terminal
 # Layout globals recomputed each frame by compute_layout, so the UI follows a
@@ -48,7 +53,7 @@ MAX_W=72   # widest it will grow, so lines stay readable on a big terminal
 # the left margin that centers the panel, and COMPACT/BANNER_H the banner size.
 COLS=80; LINES_=24; W=$MAX_W; PAD=''; COMPACT=0; BANNER_H=9
 
-cleanup(){ printf '\033[?25h%s' "$RESET"; rm -f "$SCAN_CACHE"; }   # show cursor, reset colour, drop scan cache
+cleanup(){ printf '\033[?25h%s' "$RESET"; }   # show cursor, reset colour (saved scans persist in scans/)
 trap cleanup EXIT INT TERM
 
 clear_screen(){ printf '\033[H\033[2J'; }
@@ -218,25 +223,41 @@ run(){ # run a command, show output, pause
 # need_device is called as  d="$(need_device)"  so ONLY the chosen identifier
 # may reach stdout. Every bit of UI (banner, menu, prompts) is therefore drawn
 # to /dev/tty — writing it to stdout would capture the ANSI banner into the
-# device name and break the match. The scan is cached in $SCAN_CACHE so one
-# scan feeds many actions; "Rescan now" refreshes it.
+# device name and break the match. Scans are saved in scans/ so one scan feeds
+# many actions; "Rescan now" writes a fresh file and the picker reads the latest.
+
+# A new scan gets a timestamped file; the picker reads the most recent one, so a
+# fresh scan feeds it while older scans stay available until cleared.
+new_scan_file(){ printf '%s/scan-%s.json' "$SCANS_DIR" "$(date +%Y%m%d-%H%M%S)"; }
+latest_scan_file(){ ls -1t "$SCANS_DIR"/scan-*.json 2>/dev/null | head -n1; }
 
 run_scan_to_cache(){ # $1 = seconds; progress + table shown on the tty
-  local secs="${1:-$SCAN_SECONDS}"
-  "$PY" -m wamble.scan -t "$secs" --write-to "$SCAN_CACHE" >/dev/tty 2>&1
+  local secs="${1:-$SCAN_SECONDS}" out
+  out="$(new_scan_file)"
+  "$PY" -m wamble.scan -t "$secs" --write-to "$out" >/dev/tty 2>&1
   printf '\n %sPress Enter to choose a device…%s' "$DIM" "$RESET" >/dev/tty
   IFS= read -r _ </dev/tty
 }
 
 # Emit "addr<TAB>rssi<TAB>name" per cached device, strongest signal first.
+# The name is resolved fresh on every call: the advertised name wins, otherwise
+# an identity a later `wamble-enum` learned for this address (read live from the
+# cache, so the list updates after you enumerate an unnamed device), otherwise
+# the derived vendor/beacon label captured at scan time.
 parse_scan_cache(){
-  [[ -s "$SCAN_CACHE" ]] || return 0
-  "$PY" - "$SCAN_CACHE" <<'PYEOF'
+  local f; f="$(latest_scan_file)"
+  [[ -n $f && -s $f ]] || return 0
+  "$PY" - "$f" <<'PYEOF'
 import json, sys
 try:
     data = json.load(open(sys.argv[1]))
 except Exception:
     sys.exit(0)
+try:
+    from wamble.common import learned_identity
+except Exception:
+    def learned_identity(_addr):
+        return ""
 devs = data.get("devices", []) or []
 devs.sort(key=lambda d: d.get("rssi") if d.get("rssi") is not None else -999,
           reverse=True)
@@ -248,13 +269,18 @@ for d in devs:
     # Never emit an empty field: IFS=<tab> in the bash reader collapses runs of
     # tabs, so an empty RSSI would merge columns and misalign the row.
     rssi = "—" if rssi is None else str(rssi)
-    name = (d.get("name") or "(unnamed)").replace("\t", " ").replace("\n", " ")
+    advertised = d.get("name") or ""
+    if advertised and advertised != "(unnamed)":
+        name = advertised
+    else:
+        name = learned_identity(addr) or d.get("display") or "(unnamed)"
+    name = name.replace("\t", " ").replace("\n", " ")
     print(f"{addr}\t{rssi}\t{name}")
 PYEOF
 }
 
 pick_device(){ # echoes a device identifier, or nothing if cancelled
-  [[ -s "$SCAN_CACHE" ]] || run_scan_to_cache "$SCAN_SECONDS"
+  [[ -n "$(latest_scan_file)" ]] || run_scan_to_cache "$SCAN_SECONDS"
   while true; do
     local addrs=() labels=() addr rssi name lbl
     while IFS=$'\t' read -r addr rssi name; do
@@ -286,7 +312,7 @@ pick_device(){ # echoes a device identifier, or nothing if cancelled
 need_device(){ pick_device; }
 
 # --- toolkit actions -------------------------------------------------------
-t_scan(){ banner; local s; s="$(ask 'Scan seconds' '8')"; run "$PY" -m wamble.scan -t "$s" --write-to "$SCAN_CACHE"; }
+t_scan(){ banner; local s out; s="$(ask 'Scan seconds' '8')"; out="$(new_scan_file)"; run "$PY" -m wamble.scan -t "$s" --write-to "$out"; }
 t_watch(){ banner; local to; to="$(ask 'Timeout seconds (blank=until Ctrl-C)' '20')"; run "$PY" -m wamble.watch --timeout "$to"; }
 t_enum(){ local d; d="$(need_device)"; [[ -z $d ]] && return; run "$PY" -m wamble.enum "$d" --readable; }
 t_cli(){ local d; d="$(need_device)"; [[ -z $d ]] && return; run "$PY" -m wamble.interactive "$d"; }
@@ -295,6 +321,29 @@ t_batt(){ local d; d="$(need_device)"; [[ -z $d ]] && return; run "$PY" -m wambl
 t_info(){ local d; d="$(need_device)"; [[ -z $d ]] && return; run "$PY" -m wamble.device_info "$d"; }
 t_mtu(){ local d; d="$(need_device)"; [[ -z $d ]] && return; run "$PY" -m wamble.mtu "$d"; }
 t_params(){ local d; d="$(need_device)"; [[ -z $d ]] && return; run "$PY" -m wamble.params "$d" --get; }
+
+# Delete the saved scan JSONs from scans/. The device picker rescans on demand,
+# so clearing them only drops saved results, never breaks the next pick.
+t_clear_scans(){
+  banner
+  local files=("$SCANS_DIR"/scan-*.json)
+  # No nullglob here, so an unmatched glob stays literal: test the first entry.
+  if [[ ! -e ${files[0]} ]]; then
+    printf ' %sNo saved scans in %s%s\n' "$YELLOW" "$SCANS_DIR" "$RESET"
+    IFS= read -r _ </dev/tty; return
+  fi
+  printf ' %sSaved scans in %s:%s\n' "$BOLD" "$SCANS_DIR" "$RESET"
+  local f
+  for f in "${files[@]}"; do printf '   %s\n' "$(basename "$f")"; done
+  printf '\n'
+  if confirm "Delete these ${#files[@]} scan file(s)?"; then
+    rm -f "${files[@]}"
+    printf ' %sDeleted %s scan file(s).%s\n' "$GREEN" "${#files[@]}" "$RESET"
+  else
+    printf ' %sCancelled.%s\n' "$DIM" "$RESET"
+  fi
+  IFS= read -r _ </dev/tty
+}
 
 toolkit_menu(){
   while true; do
@@ -308,11 +357,13 @@ toolkit_menu(){
       "Device information         (read_device_info)" \
       "ATT MTU                    (gatt_mtu)" \
       "Connection params (--get)  (gatt_params)" \
+      "Delete saved scans         (clear scans/)" \
       "← Back"
     case $REPLY_INDEX in
       0) t_scan;; 1) t_watch;; 2) t_enum;; 3) t_cli;; 4) t_find;;
       5) t_batt;; 6) t_info;; 7) t_mtu;; 8) t_params;;
-      9|-1) return;;
+      9) t_clear_scans;;
+      10|-1) return;;
     esac
   done
 }

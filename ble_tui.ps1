@@ -19,6 +19,10 @@ $Here = $PSScriptRoot
 if ([string]::IsNullOrEmpty($Here)) { $Here = Split-Path -Parent $MyInvocation.MyCommand.Path }
 $Src = Join-Path $Here 'src'
 $Captures = Join-Path $Src 'wamble/exploits/captures'
+# Scans are saved inside the project (scans/) rather than a temp dir, so they are
+# easy to find, reuse and clear from the TUI ("Delete saved scans").
+$ScansDir = Join-Path $Here 'scans'
+try { New-Item -ItemType Directory -Force -Path $ScansDir | Out-Null } catch {}
 # Make the wamble package importable for `python -m wamble.*`, installed or not.
 if ($env:PYTHONPATH) { $env:PYTHONPATH = "$Src$([IO.Path]::PathSeparator)$env:PYTHONPATH" }
 else { $env:PYTHONPATH = $Src }
@@ -37,7 +41,15 @@ $TL = [char]0x256D; $TR = [char]0x256E; $BL = [char]0x2570; $BR = [char]0x256F
 $HZ = [char]0x2500; $VT = [char]0x2502; $LT = [char]0x251C; $RT = [char]0x2524
 $ARROW = [char]0x25BA; $UPTRI = [char]0x25B2; $DNTRI = [char]0x25BC
 
-$Version = '0.1.2'
+# Single source of truth: read the package version so this launcher never drifts
+# from pyproject.toml / src/wamble/__init__.py. $Py and PYTHONPATH are set above.
+$Version = '?'
+if ($Py) {
+    try {
+        $v = (& $Py -c 'import wamble; print(wamble.__version__)' 2>$null)
+        if ($v) { $Version = "$v".Trim() }
+    } catch {}
+}
 $MinW = 40   # narrowest the panel is allowed to get
 $MaxW = 72   # widest it will grow, so lines stay readable on a big terminal
 # Layout globals recomputed each frame by Update-Layout, so the UI follows a
@@ -188,6 +200,29 @@ function Get-Device { return (Ask 'Target device (name substring or address)') }
 function Tool([string]$name) { return "wamble.$name" }
 function Exp([string]$name)  { return "wamble.exploits.$name" }
 
+# A new scan gets a timestamped file in scans/, so results are kept and clearable.
+function New-ScanFile { return (Join-Path $ScansDir ("scan-{0}.json" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))) }
+
+# Delete the saved scan JSONs from scans/.
+function Clear-Scans {
+    Show-Banner
+    $files = @(Get-ChildItem -Path $ScansDir -Filter 'scan-*.json' -ErrorAction SilentlyContinue)
+    if ($files.Count -eq 0) {
+        Write-Host " No saved scans in $ScansDir" -ForegroundColor Yellow
+        Read-Host | Out-Null; return
+    }
+    Write-Host " Saved scans in ${ScansDir}:" -ForegroundColor White
+    $files | ForEach-Object { Write-Host "   $($_.Name)" }
+    Write-Host ''
+    if (Confirm-Yes "Delete these $($files.Count) scan file(s)?") {
+        $files | Remove-Item -Force -ErrorAction SilentlyContinue
+        Write-Host " Deleted $($files.Count) scan file(s)." -ForegroundColor Green
+    } else {
+        Write-Host ' Cancelled.' -ForegroundColor DarkGray
+    }
+    Read-Host | Out-Null
+}
+
 # --- toolkit menu ----------------------------------------------------------
 function Show-ToolkitMenu {
     while ($true) {
@@ -201,9 +236,10 @@ function Show-ToolkitMenu {
             'Device information         (read_device_info)',
             'ATT MTU                    (gatt_mtu)',
             'Connection params (--get)  (gatt_params)',
+            'Delete saved scans         (clear scans/)',
             'Back')
         switch ($i) {
-            0 { $s = Ask 'Scan seconds' '8'; Invoke-Tool @((Tool 'scan'), '-t', $s) }
+            0 { $s = Ask 'Scan seconds' '8'; $out = New-ScanFile; Invoke-Tool @((Tool 'scan'), '-t', $s, '--write-to', $out) }
             1 { $t = Ask 'Timeout seconds' '20'; Invoke-Tool @((Tool 'watch'), '--timeout', $t) }
             2 { $d = Get-Device; if ($d) { Invoke-Tool @((Tool 'enum'), $d, '--readable') } }
             3 { $d = Get-Device; if ($d) { Invoke-Tool @((Tool 'interactive'), $d) } }
@@ -212,6 +248,7 @@ function Show-ToolkitMenu {
             6 { $d = Get-Device; if ($d) { Invoke-Tool @((Tool 'device_info'), $d) } }
             7 { $d = Get-Device; if ($d) { Invoke-Tool @((Tool 'mtu'), $d) } }
             8 { $d = Get-Device; if ($d) { Invoke-Tool @((Tool 'params'), $d, '--get') } }
+            9 { Clear-Scans }
             default { return }
         }
     }

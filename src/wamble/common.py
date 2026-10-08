@@ -32,7 +32,15 @@ def fmt_bytes(data: Any) -> str:
 
 
 def decode_bytes(data: Any) -> str:
-    """Decode bytes to UTF-8 string, stripping null bytes. Returns '' on failure."""
+    """Decode bytes to a printable UTF-8 string, or '' when the value is binary.
+
+    A value only counts as text when it decodes as UTF-8 *and* every character
+    left after trailing NULs are stripped is printable (ordinary whitespace
+    aside). This deliberately rejects values that merely contain a stray
+    printable byte, such as ``00 64 00`` which would otherwise decode to an
+    invisible-NUL ``"d"`` and masquerade as the letter d rather than the binary
+    value it is. Returns '' for empty input, a decode failure, or binary data.
+    """
     if data is None:
         return ""
     try:
@@ -40,18 +48,91 @@ def decode_bytes(data: Any) -> str:
     except Exception:
         return ""
     try:
-        return b.decode("utf-8").rstrip("\x00")
+        text = b.decode("utf-8")
     except UnicodeDecodeError:
         return ""
+    text = text.rstrip("\x00")
+    if not text:
+        return ""
+    if all(ch.isprintable() or ch in "\t\n\r" for ch in text):
+        return text
+    return ""
+
+
+def describe_value(data: Any) -> str | None:
+    """A short, honest interpretation of a non-text characteristic value.
+
+    Used for the second line under a hex dump when :func:`decode_bytes` found no
+    text, so a binary value is explained rather than silently left bare (which
+    reads like a bug next to a value that did decode). Small fixed-width values
+    are shown as their little-endian unsigned integer, the convention for BLE
+    scalar fields; anything else is reported as a byte count. Returns ``None``
+    for empty input, where the hex line already says ``(empty)``.
+    """
+    if data is None:
+        return None
+    try:
+        b = bytes(data)
+    except Exception:
+        return None
+    if not b:
+        return None
+    if len(b) in (1, 2, 4, 8):
+        value = int.from_bytes(b, "little")
+        return f"{value} (uint{len(b) * 8}, little-endian)"
+    return f"binary data, {len(b)} byte{'s' if len(b) != 1 else ''}"
+
+
+def ascii_gutter(data: Any) -> str | None:
+    """Render *data* as a hexdump-style ASCII column, or ``None`` if it has none.
+
+    Each byte in the printable ASCII range (``0x20``-``0x7E``) is shown as its
+    character and every other byte as ``.``, so readable text embedded in an
+    otherwise binary value stays visible. For example a firmware field returning
+    ``00 00 41 01 33 33 34 00 00`` shows ``..A.334..``, revealing the ``A334``
+    that a "binary data" summary alone would hide. Returns ``None`` when no byte
+    is printable, where an all-dots gutter would be pure noise.
+    """
+    if data is None:
+        return None
+    try:
+        b = bytes(data)
+    except Exception:
+        return None
+    if not any(0x20 <= c <= 0x7E for c in b):
+        return None
+    return "".join(chr(c) if 0x20 <= c <= 0x7E else "." for c in b)
 
 
 def show_value(data: Any, label: str = "") -> None:
-    """Print hex and text representation of a characteristic value."""
-    hex_str = fmt_bytes(data)
-    console.print(f"  {label}Hex:  {hex_str}" if label else f"  Hex:  {hex_str}")
+    """Print a characteristic value as hex plus an honest interpretation.
+
+    Printable text is shown as ``Text:``. Otherwise the value gets an
+    ``Int:``/``Data:`` summary from :func:`describe_value`, and, whenever it
+    contains any readable ASCII, an ``ASCII:`` hexdump gutter from
+    :func:`ascii_gutter` so embedded text (a model or firmware string buried in a
+    binary field) is not lost behind the summary.
+    """
+
+    def line(field: str, value: str) -> None:
+        # Pad the label so every value column lines up, longest label ("ASCII:").
+        row = f"{field:<6} {value}"
+        console.print(f"  {label}{row}" if label else f"  {row}")
+
+    line("Hex:", fmt_bytes(data))
     text = decode_bytes(data)
     if text:
-        console.print(f"  {label}Text: {text}" if label else f"  Text: {text}")
+        line("Text:", text)
+        return
+    described = describe_value(data)
+    if described is None:
+        return
+    # A fixed-width integer gets an "Int:" label; everything else is just data.
+    field = "Int:" if described.startswith(tuple("0123456789")) else "Data:"
+    line(field, described)
+    gutter = ascii_gutter(data)
+    if gutter is not None:
+        line("ASCII:", gutter)
 
 
 #: Canonical display order for the GATT characteristic properties we surface.
@@ -241,7 +322,7 @@ def load_targets(path: Path | None = None) -> dict[str, str]:
     """
     path = path or targets_path()
     try:
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             data = json.load(f)
     except (OSError, ValueError):
         return {}
@@ -254,7 +335,7 @@ def save_targets(targets: dict[str, str], path: Path | None = None) -> None:
     """Write the ``alias -> identifier`` map, creating the parent directory."""
     path = path or targets_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(targets, f, indent=2, sort_keys=True)
 
 
@@ -272,6 +353,65 @@ def resolve_target(identifier: str, path: Path | None = None) -> str:
     if not text.startswith("@"):
         return text
     return load_targets(path).get(text[1:], text)
+
+
+def identities_path() -> Path:
+    """Location of the learned-identity cache file.
+
+    This cache remembers what a device turned out to be once ``wamble-enum`` has
+    connected to it and read its real name from the Device Information Service,
+    so a later scan can label an otherwise ``(unnamed)`` device with what it was
+    enumerated as. It lives next to the targets file (see :func:`targets_path`):
+    ``identities.json`` in the same directory, overridable with
+    ``$WAMBLE_IDENTITIES`` (which the tests use).
+    """
+    override = os.environ.get("WAMBLE_IDENTITIES")
+    if override:
+        return Path(override)
+    return targets_path().with_name("identities.json")
+
+
+def load_identities(path: Path | None = None) -> dict[str, str]:
+    """Return the saved ``address -> learned name`` map, or ``{}`` if none.
+
+    A missing, unreadable, or non-object file yields an empty map rather than an
+    error, so a corrupt cache never stops a scan from running. Only string values
+    are kept.
+    """
+    path = path or identities_path()
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {str(k): v for k, v in data.items() if isinstance(v, str)}
+
+
+def learned_identity(address: str, path: Path | None = None) -> str:
+    """Return the name a past enumeration learned for *address*, or ``""``."""
+    return load_identities(path).get(str(address), "")
+
+
+def remember_identity(address: str, name: str, path: Path | None = None) -> None:
+    """Record that *address* was enumerated as *name*.
+
+    A blank name, or one that repeats what is already stored, is a no-op so the
+    cache file is only rewritten when it actually changes.
+    """
+    address = str(address)
+    name = name.strip()
+    if not name:
+        return
+    path = path or identities_path()
+    identities = load_identities(path)
+    if identities.get(address) == name:
+        return
+    identities[address] = name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(identities, f, indent=2, sort_keys=True)
 
 
 async def find_device(
@@ -643,9 +783,11 @@ __all__ = [
     "DISPLAYED_PROPERTIES",
     "GATTTableBuilder",
     "add_connection_args",
+    "ascii_gutter",
     "connect",
     "decode_bytes",
     "describe_gatt_error",
+    "describe_value",
     "enumerate_services",
     "find_characteristic",
     "find_descriptor",
@@ -653,7 +795,10 @@ __all__ = [
     "fmt_bytes",
     "format_properties",
     "gatt_error_code",
+    "identities_path",
     "is_gatt_refusal",
+    "learned_identity",
+    "load_identities",
     "load_targets",
     "parse_advertisement_data",
     "print_characteristics_table",
@@ -661,6 +806,7 @@ __all__ = [
     "print_gatt_tables",
     "print_services_table",
     "read_gatt_char",
+    "remember_identity",
     "resolve_target",
     "save_targets",
     "short_uuid",

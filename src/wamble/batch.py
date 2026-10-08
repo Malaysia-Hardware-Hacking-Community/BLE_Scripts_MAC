@@ -57,7 +57,7 @@ def read_script(path: str) -> str:
     """Read the script from *path*, or from stdin when *path* is ``-``."""
     if path == "-":
         return sys.stdin.read()
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         return f.read()
 
 

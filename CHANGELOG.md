@@ -7,8 +7,52 @@ tagging releases.
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-10-08
+
+### Fixed
+
+- All text files are now read and written as UTF-8 explicitly. On Windows (a
+  target platform) the default encoding is cp1252, which cannot decode some bytes
+  the TUI launcher contains (the `←` glyph) and would mangle non-ASCII device
+  names in exported CSV/JSON or a batch script. This had broken the Windows CI
+  run. Every `open()` in the toolkit and tests now passes `encoding="utf-8"`.
+- The TUI launchers (`ble_tui.sh`, `ble_tui.ps1`) showed a stale `v0.1.2` banner
+  because the version was hardcoded in four places and drifted. The version now
+  has a single source of truth, `wamble.__version__`: `pyproject.toml` reads it
+  dynamically, and both launchers read it at runtime, so a release only ever
+  edits one file. A test guards against reintroducing a hardcoded version.
+- Reading a characteristic value now shows honest, lossless interpretation lines
+  under the hex dump. A non-text value is reported as `Int:` for a 1/2/4/8-byte
+  little-endian scalar or `Data: binary data, N bytes` otherwise, and whenever it
+  contains readable ASCII an `ASCII:` hexdump gutter surfaces it, so text buried
+  in a binary field (for example a firmware value `00 00 41 01 33 33 34 00 00`
+  shows `..A.334..`) is no longer hidden behind a "binary data" summary. Text
+  decoding is stricter too: a value only counts as `Text:` when every byte is
+  printable, so `00 64 00` is no longer mis-decoded to an invisible-NUL `"d"`.
+  Affects `wamble-enum`, `wamble-gatt`, `wamble-device-info` and the CTF reads.
+- `wamble-gatt`'s `read` now prints which characteristic it read (UUID, assigned
+  name and value handle) before the value, so reading a handle that resolves to a
+  different characteristic than expected (e.g. the binary PnP ID rather than the
+  Firmware Revision String) is obvious instead of an unexplained hex dump.
+
 ### Added
 
+- The TUIs (`ble_tui.sh`, `ble_tui.ps1`) now save scans as timestamped JSON files
+  in a `scans/` directory inside the project instead of a hidden temp dir, so
+  results are easy to find and reuse. The bash device picker reads the most recent
+  scan. Both TUIs gain a "Delete saved scans" action to clear the directory.
+  `scans/` is gitignored.
+- Learned-identity cache. When `wamble-enum` connects to a device and reads its
+  real name from the Device Information Service, it now remembers that name
+  against the device address (`identities.json`, next to `targets.json`). A later
+  `wamble-scan` or `wamble-watch` reads it back, so a device that advertises no
+  name is labelled with what you enumerated it as instead of repeating
+  `(unnamed)`. The advertised name always wins when present; the learned name
+  only fills the blank. Overridable with `$WAMBLE_IDENTITIES`. The TUI device
+  picker (`ble_tui.sh`) resolves the same way and re-reads the cache each time it
+  is shown, so after you enumerate an unnamed device its row updates without a
+  re-scan. The scan JSON gains a `display` field carrying this resolved label
+  (the raw `name` field is unchanged).
 - `wamble-profile`: subscribe to and decode a standard SIG measurement profile,
   the way `wamble-battery` reads one characteristic. Handles Heart Rate
   Measurement (`0x2A37`), Temperature Measurement (`0x2A1C`, Health Thermometer)

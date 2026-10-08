@@ -219,3 +219,6 @@ __marimo__/
 
 # Exploit runtime capture output (regenerated per run)
 src/wamble/exploits/captures/
+
+# Saved BLE scans from the TUI device picker (regenerated per scan)
+scans/

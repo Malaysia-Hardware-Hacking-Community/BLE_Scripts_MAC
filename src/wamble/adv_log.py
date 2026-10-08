@@ -69,7 +69,7 @@ def _passes_filters(device: Any, adv: Any, name: str | None, min_rssi: int | Non
 def _open_output(path: str | None):
     """Yield a writable stream: the file at *path*, or stdout when *path* is None."""
     if path:
-        with open(path, "w", newline="") as f:
+        with open(path, "w", newline="", encoding="utf-8") as f:
             yield f
     else:
         yield sys.stdout

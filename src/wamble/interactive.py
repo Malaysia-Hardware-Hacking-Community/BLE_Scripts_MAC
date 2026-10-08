@@ -83,6 +83,7 @@ from wamble.common import (
     print_services_table,
     short_uuid,
     show_value,
+    uuid_name,
 )
 from wamble.gatt import as_handle
 
@@ -313,9 +314,18 @@ async def _dispatch(client, parts, subscriptions, args) -> str | None:  # noqa: 
             console.print("[red]Not readable.[/red]")
         else:
             try:
-                show_value(await client.read_gatt_char(char))
+                value = await client.read_gatt_char(char)
             except Exception as exc:
                 _print_gatt_error(exc, "read that characteristic")
+                return None
+            # Name what was actually read (UUID, assigned name, value handle), so
+            # a handle that resolved to a different characteristic than expected -
+            # e.g. the binary PnP ID rather than the Firmware Revision String - is
+            # obvious instead of a mystery hex dump.
+            name = uuid_name(char.uuid)
+            label = f" ({name})" if name else ""
+            console.print(f"[cyan]Read {char.uuid}{label} (handle {char.handle})[/cyan]")
+            show_value(value)
         return None
 
     if cmd in {"write-req", "write-cmd"} and len(parts) == 3:

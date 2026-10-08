@@ -10,7 +10,7 @@ from rich.live import Live
 from rich.table import Table
 
 from wamble.common import short_uuid, uuid_name
-from wamble.identify import decode_manufacturer, identify
+from wamble.identify import decode_manufacturer, display_name
 
 console = Console()
 
@@ -40,9 +40,7 @@ def build_table(latest: dict) -> Table:
         reverse=True,
     )
     for device, adv, seen in ordered:
-        name = device.name or adv.local_name
-        if not name:
-            name = f"· {identify(adv)}" if identify(adv) else "(unnamed)"
+        name = display_name(device, adv)
         table.add_row(
             name,
             device.address,
