@@ -7,6 +7,40 @@ tagging releases.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-08
+
+Tier 3: connection/performance and signal tooling, OS-driven pairing, and an
+authorized GATT fuzzer. See `docs/ROADMAP.md`.
+
+### Added
+
+- `wamble.exploits.gatt_fuzz`: an authorized, own-device GATT write fuzzer (Exploit
+  9). Sends a bounded, deterministic set of malformed/boundary payloads to a
+  device's writable characteristics and reports errors and disconnects. It is a dry
+  run until both `--authorized` and `--execute` are given, targets one named device,
+  and stops when the link drops. Final feature of Tier 3. The exploit suite's
+  ethics note was updated to frame it as bounded own-device robustness testing, not
+  a denial-of-service tool.
+- `wamble-pair`: pair or unpair a device via the OS. On Windows it uses the WinRT
+  pairing API (`bleak.pair()`/`unpair()`); on macOS, which has no explicit pairing
+  API, it triggers CoreBluetooth's auto-pairing by reading an encryption-protected
+  characteristic given with `--char`, and directs you to System Settings for
+  unpairing. WAMBLE does not implement SMP itself (no OS exposes the raw channel to
+  apps on the target platforms); it drives the OS pairing and reports the outcome.
+  Tier 3.
+- `wamble-range`: track one device's RSSI live as a "hotter / colder" finder, with
+  a sparkline of recent samples, a coarse signal label, a warmer/cooler trend, and
+  a rough log-distance estimate. Reads the per-advertisement RSSI the scanner
+  already reports, so it behaves the same on macOS and Windows. Tier 3.
+- `wamble-bench`: benchmark a device's connection performance. Times connection
+  establishment over repeated samples (min/median/mean/max), reports connect
+  reliability and the negotiated ATT MTU, and measures read and notification
+  throughput over a window. Uses only cross-platform `bleak` calls, so it behaves
+  the same on macOS and Windows. First feature of Tier 3 (see `docs/ROADMAP.md`).
+- `docs/ROADMAP.md`: the living 4-tier feature plan (shipped Tiers 1-2, proposed
+  Tier 3, and the out-of-scope Tier 4 boundary, including why BlueZ-style explicit
+  pairing needs a bring-your-own-radio backend on macOS/Windows).
+
 ## [0.1.3] - 2026-10-08
 
 ### Fixed

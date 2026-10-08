@@ -112,6 +112,9 @@ is named in the first column), and every tool takes `--help`.
 | `wamble-params` ([`params`](src/wamble/params.py))               | `btmgmt conn-update`                   | Read or request the Peripheral Preferred Connection Parameters characteristic (`0x2A04`).                                              |
 | `wamble-ctf` ([`ctf`](src/wamble/ctf.py))                        | n/a                                    | Scriptable BLE CTF client (read/write/notify by handle). See below.                                                                   |
 | `wamble-export` ([`export`](src/wamble/export.py))               | n/a                                    | Dump the full GATT tree to JSON, or diff two dumps with `--diff` (offline). See [Export and diff](#export-and-diff).                   |
+| `wamble-bench` ([`bench`](src/wamble/bench.py))                  | n/a                                    | Benchmark connection time, ATT MTU, and read/notify throughput over repeated samples. See [Benchmarking](#benchmarking).               |
+| `wamble-range` ([`range`](src/wamble/range.py))                  | n/a                                    | Track a device's RSSI live (sparkline, warmer/cooler, rough distance) to locate it. See [Tracking a device's signal](#tracking-a-devices-signal). |
+| `wamble-pair` ([`pair`](src/wamble/pair.py))                     | `bluetoothctl pair`                    | Pair/unpair via the OS (WinRT on Windows; encrypted-read trigger on macOS). See [Pairing](#pairing).                                    |
 | `wamble-targets` ([`targets`](src/wamble/targets.py))            | n/a                                    | Save short aliases for devices (`@name`), so any connecting tool can target them. See [Target profiles](#target-profiles).             |
 | [`wamble.common`](src/wamble/common.py), [`wamble.gatt`](src/wamble/gatt.py) | n/a                        | Shared libraries. Not entry points.                                                                                                    |
 
@@ -280,6 +283,68 @@ wamble-export --diff before.json after.json        # what changed (no device nee
 The diff reports services and characteristics added or removed, descriptors
 added or removed, and characteristic properties that changed. The snapshot is
 sorted and stable, so re-exporting the same device diffs clean.
+
+### Benchmarking
+
+Measure how a link actually performs, which is useful for diagnosing a flaky or
+slow device:
+
+```bash
+wamble-bench "Acme Tracker"                       # 5 connects + 3s read throughput
+wamble-bench "Acme Tracker" -n 10                 # 10 connection samples
+wamble-bench "Acme Tracker" --read-seconds 0      # skip the read throughput phase
+wamble-bench "Acme Tracker" --notify-seconds 5    # also measure notifications/sec
+wamble-bench "Acme Tracker" --read-char 2a37      # read a specific characteristic
+```
+
+It reports connection time (min/median/mean/max) over the samples, how many
+connects succeeded, the negotiated ATT MTU, and read/notification throughput. By
+default it reads the first readable characteristic; a device is free to refuse a
+read, in which case that phase stops early and the rest of the report still
+prints. It uses only cross-platform `bleak` calls, so it works the same on macOS
+and Windows.
+
+### Tracking a device's signal
+
+Follow one device's signal strength to physically locate it, like a
+"hotter / colder" game:
+
+```bash
+wamble-range "Acme Tag"                      # live RSSI until Ctrl-C
+wamble-range "Acme Tag" --timeout 60         # stop after a minute
+wamble-range "Acme Tag" --tx-power -65       # calibrate the 1 m reference RSSI
+wamble-range "Acme Tag" --path-loss 3.0      # indoor environment exponent
+```
+
+It shows the current RSSI, a sparkline of recent samples, a warmer/cooler trend
+(so you know if you are closing in), and a rough distance estimate. The distance
+is a guide, not a measurement: BLE RSSI is noisy, so calibrate `--tx-power` (the
+RSSI at one metre) and `--path-loss` for your device and surroundings. It reads
+the advertisement RSSI the scanner reports, so it works the same on macOS and
+Windows.
+
+### Pairing
+
+Pair or unpair a device through the operating system:
+
+```bash
+wamble-pair "Acme Lock"                       # Windows: pairs via the WinRT API
+wamble-pair "Acme Lock" --char 2a9f           # macOS: read an encrypted char to pair
+wamble-pair "Acme Lock" --unpair              # Windows/Linux only
+```
+
+Pairing is the Security Manager key exchange, and the OS always performs it: an
+app cannot run SMP itself, because neither macOS nor Windows exposes the raw
+channel to apps (this is why `gatttool` can pair explicitly on Linux, which does,
+and why a self-contained pairing stack here would need an external USB radio, see
+[`docs/ROADMAP.md`](docs/ROADMAP.md)). So this tool drives the OS pairing and
+reports the result:
+
+- **Windows**: `pair`/`--unpair` call the WinRT pairing API directly.
+- **macOS**: there is no explicit pairing call; CoreBluetooth auto-pairs on the
+  first access to an encryption-protected characteristic, so pass `--char <uuid>`
+  of such a characteristic and the tool reads it to trigger pairing. Unpairing is
+  done in System Settings > Bluetooth.
 
 ### Target profiles
 
