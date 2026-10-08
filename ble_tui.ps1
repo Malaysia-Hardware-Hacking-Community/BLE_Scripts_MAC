@@ -236,6 +236,9 @@ function Show-ToolkitMenu {
             'Device information         (read_device_info)',
             'ATT MTU                    (gatt_mtu)',
             'Connection params (--get)  (gatt_params)',
+            'Connection benchmark       (bench)',
+            'Signal / range monitor     (range)',
+            'Pair / unpair              (pair)',
             'Delete saved scans         (clear scans/)',
             'Back')
         switch ($i) {
@@ -248,7 +251,10 @@ function Show-ToolkitMenu {
             6 { $d = Get-Device; if ($d) { Invoke-Tool @((Tool 'device_info'), $d) } }
             7 { $d = Get-Device; if ($d) { Invoke-Tool @((Tool 'mtu'), $d) } }
             8 { $d = Get-Device; if ($d) { Invoke-Tool @((Tool 'params'), $d, '--get') } }
-            9 { Clear-Scans }
+            9 { $d = Get-Device; if ($d) { Invoke-Tool @((Tool 'bench'), $d) } }
+            10 { $d = Get-Device; if ($d) { $t = Ask 'Timeout seconds (blank=until Ctrl-C)' '30'; if ($t) { Invoke-Tool @((Tool 'range'), $d, '--timeout', $t) } else { Invoke-Tool @((Tool 'range'), $d) } } }
+            11 { $d = Get-Device; if ($d) { $c = Ask 'Encrypted char UUID to trigger pairing on macOS (blank = none)'; if ($c) { Invoke-Tool @((Tool 'pair'), $d, '--char', $c) } else { Invoke-Tool @((Tool 'pair'), $d) } } }
+            12 { Clear-Scans }
             default { return }
         }
     }
@@ -274,6 +280,7 @@ function Show-ExploitMenu {
             'Capture-replay / forgery       (replay, gated)',
             'Persistence across reboot      (persistence, gated)',
             'Device-name deface to PWNED!   (deface, gated)',
+            'GATT write fuzzer              (fuzz, gated)',
             'Back')
         switch ($i) {
             0 { $d = Get-Device; if ($d) { Invoke-Tool @((Exp 'recon_dump'), $d) } }
@@ -284,6 +291,7 @@ function Show-ExploitMenu {
             5 { $d = Get-Device; if ($d -and (Require-Auth $d)) { $c = Ask 'Capture file to replay (path)'; if ($c) { Invoke-Tool @((Exp 'replay'), $d, '--authorized', '--from-capture', $c) } } }
             6 { $d = Get-Device; if ($d -and (Require-Auth $d)) { Show-PersistMenu $d } }
             7 { $d = Get-Device; if ($d -and (Require-Auth $d)) { Show-DefaceMenu $d } }
+            8 { $d = Get-Device; if ($d -and (Require-Auth $d)) { Show-FuzzMenu $d } }
             default { return }
         }
     }
@@ -303,6 +311,18 @@ function Show-DefaceMenu([string]$dev) {
     switch ($i) {
         0 { Invoke-Tool @((Exp 'deface'), $dev, '--authorized') }
         1 { Invoke-Tool @((Exp 'deface'), $dev, '--authorized', '--restore') }
+        default { return }
+    }
+}
+
+function Show-FuzzMenu([string]$dev) {
+    $i = Show-Menu "Fuzz writable characteristics on $dev" @(
+        'dry run (list payloads, write nothing)',
+        'execute (actually fuzz - can hang the device)',
+        'Back')
+    switch ($i) {
+        0 { Invoke-Tool @((Exp 'gatt_fuzz'), $dev) }
+        1 { Invoke-Tool @((Exp 'gatt_fuzz'), $dev, '--authorized', '--execute') }
         default { return }
     }
 }

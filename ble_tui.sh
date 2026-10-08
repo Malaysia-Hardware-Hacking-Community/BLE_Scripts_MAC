@@ -321,6 +321,19 @@ t_batt(){ local d; d="$(need_device)"; [[ -z $d ]] && return; run "$PY" -m wambl
 t_info(){ local d; d="$(need_device)"; [[ -z $d ]] && return; run "$PY" -m wamble.device_info "$d"; }
 t_mtu(){ local d; d="$(need_device)"; [[ -z $d ]] && return; run "$PY" -m wamble.mtu "$d"; }
 t_params(){ local d; d="$(need_device)"; [[ -z $d ]] && return; run "$PY" -m wamble.params "$d" --get; }
+t_bench(){ local d; d="$(need_device)"; [[ -z $d ]] && return; run "$PY" -m wamble.bench "$d"; }
+t_range(){
+  local d to; d="$(need_device)"; [[ -z $d ]] && return
+  to="$(ask 'Timeout seconds (blank=until Ctrl-C)' '30')"
+  if [[ -n $to ]]; then run "$PY" -m wamble.range "$d" --timeout "$to"
+  else run "$PY" -m wamble.range "$d"; fi
+}
+t_pair(){
+  local d c; d="$(need_device)"; [[ -z $d ]] && return
+  c="$(ask 'Encrypted char UUID to trigger pairing on macOS (blank = none)')"
+  if [[ -n $c ]]; then run "$PY" -m wamble.pair "$d" --char "$c"
+  else run "$PY" -m wamble.pair "$d"; fi
+}
 
 # Delete the saved scan JSONs from scans/. The device picker rescans on demand,
 # so clearing them only drops saved results, never breaks the next pick.
@@ -357,13 +370,17 @@ toolkit_menu(){
       "Device information         (read_device_info)" \
       "ATT MTU                    (gatt_mtu)" \
       "Connection params (--get)  (gatt_params)" \
+      "Connection benchmark       (bench)" \
+      "Signal / range monitor     (range)" \
+      "Pair / unpair              (pair)" \
       "Delete saved scans         (clear scans/)" \
       "← Back"
     case $REPLY_INDEX in
       0) t_scan;; 1) t_watch;; 2) t_enum;; 3) t_cli;; 4) t_find;;
       5) t_batt;; 6) t_info;; 7) t_mtu;; 8) t_params;;
-      9) t_clear_scans;;
-      10|-1) return;;
+      9) t_bench;; 10) t_range;; 11) t_pair;;
+      12) t_clear_scans;;
+      13|-1) return;;
     esac
   done
 }
@@ -420,6 +437,23 @@ e_persist(){
   esac
 }
 
+e_fuzz(){
+  local d; d="$(need_device)"; [[ -z $d ]] && return
+  banner
+  if ! confirm "Authorized: do you own '$d' / have permission?"; then
+    printf '\n %sNot authorized — aborting.%s\n' "$YELLOW" "$RESET"; IFS= read -r _ </dev/tty; return
+  fi
+  menu "Fuzz writable characteristics on $d" \
+    "dry run (list payloads, write nothing)" \
+    "execute (actually fuzz — can hang the device)" \
+    "← Back"
+  case $REPLY_INDEX in
+    0) run "$PY" -m wamble.exploits.gatt_fuzz "$d";;
+    1) run "$PY" -m wamble.exploits.gatt_fuzz "$d" --authorized --execute;;
+    *) return;;
+  esac
+}
+
 exploit_menu(){
   while true; do
     menu "BLE-Exploits  ·  authorized / own-device only" \
@@ -431,10 +465,12 @@ exploit_menu(){
       "Capture-replay / forgery       (replay, gated)" \
       "Persistence across reboot      (persistence, gated)" \
       "Device-name deface → PWNED!    (deface, gated)" \
+      "GATT write fuzzer              (fuzz, gated)" \
       "← Back"
     case $REPLY_INDEX in
       0) e_recon;; 1) e_posture;; 2) e_notify;; 3) e_adv;; 4) e_led;; 5) e_replay;; 6) e_persist;; 7) e_deface;;
-      8|-1) return;;
+      8) e_fuzz;;
+      9|-1) return;;
     esac
   done
 }

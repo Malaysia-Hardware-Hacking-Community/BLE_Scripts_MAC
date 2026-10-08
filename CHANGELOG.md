@@ -9,6 +9,13 @@ tagging releases.
 
 ### Added
 
+- `wamble.exploits.gatt_fuzz`: an authorized, own-device GATT write fuzzer (Exploit
+  9). Sends a bounded, deterministic set of malformed/boundary payloads to a
+  device's writable characteristics and reports errors and disconnects. It is a dry
+  run until both `--authorized` and `--execute` are given, targets one named device,
+  and stops when the link drops. Final feature of Tier 3. The exploit suite's
+  ethics note was updated to frame it as bounded own-device robustness testing, not
+  a denial-of-service tool.
 - `wamble-pair`: pair or unpair a device via the OS. On Windows it uses the WinRT
   pairing API (`bleak.pair()`/`unpair()`); on macOS, which has no explicit pairing
   API, it triggers CoreBluetooth's auto-pairing by reading an encryption-protected
